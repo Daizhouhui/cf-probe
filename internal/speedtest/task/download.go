@@ -184,7 +184,7 @@ func downloadHandler(ip *net.IPAddr) (float64, string) {
 		colo      string
 		started   = time.Now()
 	)
-	for time.Now().Before(deadline) {
+	for time.Now().Before(deadline) && !canceled() {
 		n, c, ok := downloadOnce(ip, deadline)
 		totalRead += n
 		if colo == "" {
@@ -231,7 +231,7 @@ func downloadOnce(ip *net.IPAddr, deadline time.Time) (int64, string, bool) {
 			return nil
 		},
 	}
-	req, err := http.NewRequest("GET", URL, nil)
+	req, err := http.NewRequestWithContext(Context(), "GET", URL, nil)
 	if err != nil {
 		if utils.Debug { // 调试模式下，输出更多信息
 			utils.Red.Printf("[调试] IP: %s, 下载测速请求创建失败，错误信息: %v, 下载测速地址: %s\n", ip.String(), err, URL)

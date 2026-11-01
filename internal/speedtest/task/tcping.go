@@ -106,7 +106,8 @@ func (p *Ping) tcping(ip *net.IPAddr) (bool, time.Duration) {
 	} else {
 		fullAddress = fmt.Sprintf("[%s]:%d", ip.String(), port)
 	}
-	conn, err := net.DialTimeout("tcp", fullAddress, tcpConnectTimeout)
+	dialer := net.Dialer{Timeout: tcpConnectTimeout}
+	conn, err := dialer.DialContext(Context(), "tcp", fullAddress)
 	if err != nil {
 		return false, 0
 	}
@@ -130,7 +131,7 @@ func (p *Ping) checkConnection(ip *net.IPAddr) (recv int, totalDelay time.Durati
 		return
 	}
 	colo = "" // TCPing 不获取 colo
-	for i := 0; i < PingTimes; i++ {
+	for i := 0; i < PingTimes && !canceled(); i++ {
 		if ok, delay := p.tcping(ip); ok {
 			recv++
 			totalDelay += delay

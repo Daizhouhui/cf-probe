@@ -44,7 +44,7 @@ func (p *Ping) httping(ip *net.IPAddr) (int, time.Duration, string) {
 	// 先访问一次获得 HTTP 状态码 及 地区码
 	var colo string
 	{
-		request, err := http.NewRequest(http.MethodHead, URL, nil)
+		request, err := http.NewRequestWithContext(Context(), http.MethodHead, URL, nil)
 		if err != nil {
 			if utils.Debug { // 调试模式下，输出更多信息
 				utils.Red.Printf("[调试] IP: %s, 延迟测速请求创建失败，错误信息: %v, 测速地址: %s\n", ip.String(), err, URL)
@@ -100,8 +100,8 @@ func (p *Ping) httping(ip *net.IPAddr) (int, time.Duration, string) {
 	// 循环测速计算延迟
 	success := 0
 	var delay time.Duration
-	for i := 0; i < PingTimes; i++ {
-		request, err := http.NewRequest(http.MethodHead, URL, nil)
+	for i := 0; i < PingTimes && !canceled(); i++ {
+		request, err := http.NewRequestWithContext(Context(), http.MethodHead, URL, nil)
 		if err != nil {
 			return 0, 0, ""
 		}
