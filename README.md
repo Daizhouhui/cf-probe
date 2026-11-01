@@ -44,6 +44,27 @@ cd cf-probe
 go build -o yx ./cmd/yx
 ```
 
+### Android APK 签名（项目维护者）
+
+APK 发布签名文件不要提交到仓库。首次设置时，在本机 PowerShell 生成一把 JKS 密钥（alias 固定为 `yx`，按提示设置新密码；不要复用已经发到聊天或提交到仓库的密码）：
+
+```powershell
+keytool -genkeypair -v -keystore "$HOME\cf-probe-release.jks" -storetype JKS -alias yx -keyalg RSA -keysize 2048 -validity 10000
+```
+
+将密钥文件内容转为 Base64 并复制：
+
+```powershell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$HOME\cf-probe-release.jks")) | Set-Clipboard
+```
+
+在 GitHub 仓库的 **Settings → Secrets and variables → Actions → New repository secret** 中添加：
+
+- `ANDROID_KEYSTORE_BASE64`：粘贴刚才复制的 Base64 内容。
+- `KEYSTORE_PASS`：生成密钥时设置的新密码。
+
+保存后清空剪贴板（`Set-Clipboard -Value ''`）。GitHub Actions 会从 Secret 还原签名文件并构建 APK；不要把 `.jks` 文件或密码提交到仓库。丢失签名密钥后，使用新密钥签名的 APK 不能覆盖安装旧密钥签名的版本。
+
 ## 使用方法
 
 ### Web 界面
