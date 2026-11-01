@@ -51,6 +51,8 @@ jobs:
           gomobile bind -target=android/arm64 -androidapi 26 -o android/app/libs/yx.aar ./androidlib
 
       - name: 构建 APK
+        env:
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
         run: |
           cd android
           echo "sdk.dir=$ANDROID_HOME" > local.properties
