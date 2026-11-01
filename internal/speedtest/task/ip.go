@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DaiZhouHui/cf-probe/internal/speedtest/utils"
 )
 
 const defaultInputFile = "ip.txt"
@@ -170,13 +172,13 @@ func loadIPRanges() []*net.IPAddr {
 				}
 			}
 		}
-		
+
 		for _, IP := range IPs {
 			IP = strings.TrimSpace(IP) // 去除首尾的空白字符（空格、制表符、换行符等）
 			if IP == "" {              // 跳过空的（即开头、结尾或连续多个 ,, 的情况）
 				continue
 			}
-			
+
 			// 检查是否是 IP:端口 格式（反代模式）
 			if strings.Contains(IP, ":") && !strings.Contains(IP, "/") {
 				parts := strings.Split(IP, ":")
@@ -191,7 +193,7 @@ func loadIPRanges() []*net.IPAddr {
 					}
 				}
 			}
-			
+
 			ranges.parseCIDR(IP) // 解析 IP 段，获得 IP、IP 范围、子网掩码
 			if isIPv4(IP) {      // 生成要测速的所有 IPv4 / IPv6 地址（单个/随机/全部）
 				ranges.chooseIPv4()
@@ -239,6 +241,22 @@ func loadIPRanges() []*net.IPAddr {
 		}
 	}
 	return sampleIPs(ranges.ips)
+}
+
+// LoadCandidates loads the configured candidate IPs without running delay probes.
+func LoadCandidates() utils.PingDelaySet {
+	ips := loadIPRanges()
+	candidates := make(utils.PingDelaySet, 0, len(ips))
+	for _, ip := range ips {
+		port := TCPPort
+		if mappedPort, ok := PortMapping[ip.String()]; ok {
+			port = mappedPort
+		}
+		candidates = append(candidates, utils.CloudflareIPData{
+			PingData: &utils.PingData{IP: ip, Port: port},
+		})
+	}
+	return candidates
 }
 
 // sampleIPs 在候选 IP 超过 SampleSize 时随机抽样。

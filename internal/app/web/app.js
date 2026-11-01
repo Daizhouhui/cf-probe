@@ -91,7 +91,10 @@ function fmtSpeed(v, tested) {
   const cls = v >= 5 ? 'g' : v >= 1 ? 'y' : 'r';
   return `<span class="${cls}">${v.toFixed(2)}</span>`;
 }
-function fmtDelay(v) {
+function fmtDelay(v, tested) {
+  if (!tested) {
+    return '<span class="speed-untested" title="尚未执行延迟测速">未测速</span>';
+  }
   const cls = v <= 100 ? 'g' : v <= 250 ? 'y' : 'r';
   // 亚毫秒延迟取整会变成 0，看着像没测到
   const txt = v > 0 && v < 10 ? v.toFixed(2) : v.toFixed(0);
@@ -168,7 +171,7 @@ function renderTable() {
       `<td class="c-idx">${i + 1}</td>` +
       `<td class="mono">${r.ip}</td>` +
       `<td class="c-num mono">${r.port}</td>` +
-      `<td class="c-num mono">${fmtDelay(r.delay)}</td>` +
+      `<td class="c-num mono">${fmtDelay(r.delay, r.delay_tested)}</td>` +
       `<td class="c-num mono">${fmtSpeed(r.speed, r.speed_tested)}</td>` +
       `<td class="c-num mono">${(r.loss_rate * 100).toFixed(0)}%</td>` +
       `<td title="${r.colo ? '' : '未获取到 Cloudflare 机房码'}">${r.colo_name || '-'}${r.colo ? ' <code style="opacity:.6">' + r.colo + '</code>' : ''}</td>` +
@@ -225,6 +228,10 @@ function downloadFilteredCSV() {
       Number(r.delay).toFixed(2), Number(r.speed).toFixed(2), r.colo || 'N/A', r.port,
     ]),
   ].map(row => row.map(csvCell).join(',')).join('\r\n');
+  if (window.AndroidBridge && typeof window.AndroidBridge.saveTextFile === 'function') {
+    window.AndroidBridge.saveTextFile('result-filtered.csv', '\ufeff' + data);
+    return;
+  }
   const blob = new Blob(['\ufeff', data], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -265,6 +272,7 @@ function setRunning(on, keepProgress) {
   state.running = on;
   if (!on) state.stopping = false;
   $('#btnStart').classList.toggle('hidden', on);
+  $('#btnSpeedOnly').classList.toggle('hidden', on);
   $('#btnStop').classList.toggle('hidden', !on);
   $('#actionProgress').classList.toggle('hidden', !state.stopping);
   $('#actionProgress').setAttribute('aria-hidden', String(!state.stopping));
@@ -360,7 +368,7 @@ function connectEvents() {
 }
 
 // ── 启动测速 ──────────────────────────────────────
-async function start() {
+async function start(skipDelay) {
   const opts = {
     colo: state.picked.join(','),
     ipv6: $('#segIPv button.on').dataset.v === '6',
@@ -375,7 +383,8 @@ async function start() {
     // 只有点了「全部」这一档才穷举网段内每个 IP
     test_all: $('#segPool button[data-pool="0"]').classList.contains('on'),
     httping: state.httping,
-    disable_dl: state.noDL,
+    disable_dl: skipDelay ? false : state.noDL,
+    skip_delay: !!skipDelay,
     dl_timeout: +$('#inDLTimeout').value || 10,
     max_runtime: +$('#inMaxRun').value || 0,
   };
@@ -874,7 +883,8 @@ async function removeCron() {
     setPool(v > 0 ? v : 0, { custom: true });
   });
   $('#inIPText').addEventListener('input', syncPoolNote);
-  $('#btnStart').onclick = start;
+  $('#btnStart').onclick = () => start(false);
+  $('#btnSpeedOnly').onclick = () => start(true);
   $('#btnStop').onclick = stop;
   $('#filterText').addEventListener('input', renderTable);
   $('#btnResultFilter').onclick = () => {

@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -32,6 +33,7 @@ class MainActivity : Activity() {
             allowFileAccess = false
             allowContentAccess = false
         }
+        webView.addJavascriptInterface(DownloadBridge(), "AndroidBridge")
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val host = request.url.host ?: return false
@@ -91,6 +93,28 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    private inner class DownloadBridge {
+        @JavascriptInterface
+        fun saveTextFile(name: String, content: String) {
+            if (name != "result-filtered.csv") {
+                runOnUiThread {
+                    Toast.makeText(this@MainActivity, "不支持的下载文件", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
+            Thread {
+                val where = saveToDownloads(name, content.toByteArray(Charsets.UTF_8))
+                runOnUiThread {
+                    Toast.makeText(
+                        this@MainActivity,
+                        if (where != null) "已保存 $name\n$where" else "保存失败",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }.start()
+        }
+    }
+
     private fun fileName(url: String, contentDisposition: String?): String {
         contentDisposition?.let {
             val m = Regex("filename\\s*=\\s*\"?([^\";]+)").find(it)
@@ -105,7 +129,10 @@ class MainActivity : Activity() {
                 // Android 10+ 走 MediaStore 存进系统「下载」，无需任何权限
                 val values = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, name)
-                    put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                    put(
+                        MediaStore.Downloads.MIME_TYPE,
+                        if (name.endsWith(".csv", ignoreCase = true)) "text/csv" else "text/plain"
+                    )
                 }
                 val uri =
                     contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)

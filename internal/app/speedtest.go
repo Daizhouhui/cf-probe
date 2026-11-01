@@ -52,6 +52,7 @@ type Options struct {
 	IPText     string  `json:"ip_text"`     // 直接指定 IP 段，优先于 IPFile
 	SampleSize int     `json:"sample_size"` // 参与延迟测速的候选 IP 数量，0 表示不限
 	Proxy      bool    `json:"proxy"`       // 反代模式：直接测给定的 IP:端口 列表
+	SkipDelay  bool    `json:"skip_delay"`  // 跳过延迟测速，直接进行下载测速
 	HTTPing    bool    `json:"httping"`     // 用真实 HTTP 请求测延迟（含 TLS 与服务端响应）
 	DisableDL  bool    `json:"disable_dl"`  // 只测延迟，跳过下载测速
 	TestAll    bool    `json:"test_all"`    // 测速全部 IP
@@ -68,6 +69,7 @@ type Result struct {
 	Received       int     `json:"received"`
 	LossRate       float64 `json:"loss_rate"`
 	Delay          float64 `json:"delay"`
+	DelayTested    bool    `json:"delay_tested"`
 	Speed          float64 `json:"speed"`
 	SpeedTested    bool    `json:"speed_tested"`
 	Colo           string  `json:"colo"`
@@ -124,6 +126,9 @@ func (o *Options) Normalize() {
 		if o.IPFile == "" && o.IPText == "" {
 			o.IPFile = DataPath(ProxyListFile)
 		}
+	}
+	if o.SkipDelay {
+		o.DisableDL = false
 	}
 	if strings.TrimSpace(o.Colo) != "" {
 		o.HTTPing = true
@@ -245,15 +250,20 @@ func Run(ctx context.Context, o Options, report func(Progress)) (rs []Result, er
 		utils.OnProgressDetail = nil
 	}()
 
-	emit(Progress{Stage: "ping", Message: pingMsg})
-	pingData := task.NewPing().Run().FilterDelay().FilterLossRate()
-	pingProgressMu.Lock()
-	pingTotalSnapshot := pingTotal
-	pingProgressMu.Unlock()
-	emit(Progress{
-		Stage: "ping", Message: pingMsg, Current: pingTotalSnapshot, Total: pingTotalSnapshot,
-		Matched: len(pingData), MatchTotal: pingTotalSnapshot,
-	})
+	var pingData utils.PingDelaySet
+	if o.SkipDelay {
+		pingData = task.LoadCandidates()
+	} else {
+		emit(Progress{Stage: "ping", Message: pingMsg})
+		pingData = task.NewPing().Run().FilterDelay().FilterLossRate()
+		pingProgressMu.Lock()
+		pingTotalSnapshot := pingTotal
+		pingProgressMu.Unlock()
+		emit(Progress{
+			Stage: "ping", Message: pingMsg, Current: pingTotalSnapshot, Total: pingTotalSnapshot,
+			Matched: len(pingData), MatchTotal: pingTotalSnapshot,
+		})
+	}
 	// 延迟阶段就超时的话，拿已经测通的 IP 继续往下走，别整批作废
 	if err := ctx.Err(); err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		return nil, err
@@ -360,6 +370,7 @@ func toResult(d utils.CloudflareIPData, speedLimit float64) Result {
 		// 用 Seconds()*1000 而非 Milliseconds()：后者是整数截断，
 		// 亚毫秒的握手（本机到近处节点常见）会被归零。
 		Delay:          d.Delay.Seconds() * 1000,
+		DelayTested:    d.Sended > 0,
 		Speed:          speed,
 		SpeedTested:    d.DownloadTested,
 		Colo:           d.Colo,
