@@ -62,15 +62,17 @@ type Options struct {
 
 // Result 是单条测速结果
 type Result struct {
-	IP       string  `json:"ip"`
-	Port     int     `json:"port"`
-	Sent     int     `json:"sent"`
-	Received int     `json:"received"`
-	LossRate float64 `json:"loss_rate"`
-	Delay    float64 `json:"delay"`
-	Speed    float64 `json:"speed"`
-	Colo     string  `json:"colo"`
-	ColoName string  `json:"colo_name"`
+	IP             string  `json:"ip"`
+	Port           int     `json:"port"`
+	Sent           int     `json:"sent"`
+	Received       int     `json:"received"`
+	LossRate       float64 `json:"loss_rate"`
+	Delay          float64 `json:"delay"`
+	Speed          float64 `json:"speed"`
+	SpeedTested    bool    `json:"speed_tested"`
+	Colo           string  `json:"colo"`
+	ColoName       string  `json:"colo_name"`
+	SpeedQualified bool    `json:"speed_qualified"` // 是否符合下载速度条件
 }
 
 // Progress 描述测速进度，供界面实时展示
@@ -280,9 +282,9 @@ func Run(ctx context.Context, o Options, report func(Progress)) (rs []Result, er
 		// 会把逐条结果直接刷没。延迟阶段的进度条照常留着。
 		utils.SetQuiet(true)
 		task.OnSpeedResult = func(d utils.CloudflareIPData) {
-			r := toResult(d)
+			r := toResult(d, o.SpeedLimit)
 			downloadChecked++
-			if d.DownloadSpeed >= o.SpeedLimit*1024*1024 {
+			if r.SpeedQualified {
 				downloadMatched++
 			}
 			emit(Progress{Stage: "download", Message: "正在测试下载速度", Result: &r})
@@ -303,7 +305,7 @@ func Run(ctx context.Context, o Options, report func(Progress)) (rs []Result, er
 		return nil, err
 	}
 
-	results := allDelayQualifiedResults(pingData)
+	results := allDelayQualifiedResults(pingData, o.SpeedLimit)
 	// 最终结果保留全部延迟符合的候选；下载速度只对实际测速过的候选有值。
 	if downloadMatchTotal > 0 {
 		emit(Progress{
@@ -320,14 +322,14 @@ func Run(ctx context.Context, o Options, report func(Progress)) (rs []Result, er
 	return results, nil
 }
 
-func allDelayQualifiedResults(pingData utils.PingDelaySet) []Result {
-	return toResults(utils.DownloadSpeedSet(pingData))
+func allDelayQualifiedResults(pingData utils.PingDelaySet, speedLimit float64) []Result {
+	return toResults(utils.DownloadSpeedSet(pingData), speedLimit)
 }
 
-func toResults(set utils.DownloadSpeedSet) []Result {
+func toResults(set utils.DownloadSpeedSet, speedLimit float64) []Result {
 	out := make([]Result, 0, len(set))
 	for _, d := range set {
-		out = append(out, toResult(d))
+		out = append(out, toResult(d, speedLimit))
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Speed != out[j].Speed {
@@ -339,7 +341,7 @@ func toResults(set utils.DownloadSpeedSet) []Result {
 }
 
 // toResult 转换单条测速数据
-func toResult(d utils.CloudflareIPData) Result {
+func toResult(d utils.CloudflareIPData, speedLimit float64) Result {
 	port := d.Port
 	if port <= 0 {
 		port = task.TCPPort
@@ -348,6 +350,7 @@ func toResult(d utils.CloudflareIPData) Result {
 	if d.Sended > 0 {
 		loss = float64(d.Sended-d.Received) / float64(d.Sended)
 	}
+	speed := d.DownloadSpeed / 1024 / 1024
 	return Result{
 		IP:       d.IP.String(),
 		Port:     port,
@@ -356,10 +359,12 @@ func toResult(d utils.CloudflareIPData) Result {
 		LossRate: loss,
 		// 用 Seconds()*1000 而非 Milliseconds()：后者是整数截断，
 		// 亚毫秒的握手（本机到近处节点常见）会被归零。
-		Delay:    d.Delay.Seconds() * 1000,
-		Speed:    d.DownloadSpeed / 1024 / 1024,
-		Colo:     d.Colo,
-		ColoName: ColoName(d.Colo),
+		Delay:          d.Delay.Seconds() * 1000,
+		Speed:          speed,
+		SpeedTested:    d.DownloadTested,
+		Colo:           d.Colo,
+		ColoName:       ColoName(d.Colo),
+		SpeedQualified: d.DownloadTested && speed > 0 && speed >= speedLimit,
 	}
 }
 

@@ -29,7 +29,7 @@ func TestDelaySubMillisecondNotZero(t *testing.T) {
 					IP: mustIP("1.1.1.1"), Sended: 4, Received: 4, Delay: c.in,
 				},
 			}}
-			out := toResults(set)
+			out := toResults(set, 0)
 			if len(out) != 1 {
 				t.Fatalf("want 1 result, got %d", len(out))
 			}

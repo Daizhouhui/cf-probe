@@ -130,7 +130,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .filter-range input{flex:1 1 0;width:0;padding-left:5px;padding-right:5px}
 .filter-range span{color:var(--faint)}
 .filter-reset,#btnDownloadFiltered{flex:0 0 auto;padding-left:9px;padding-right:9px}
-#btnResultFilter.active{border-color:var(--accent);color:var(--ink)}
+#btnResultFilter.active,#btnSpeedFilter.active{border-color:var(--accent);color:var(--ink)}
 
 /* 表格 */
 .table-wrap{flex:1;overflow:auto;min-height:0;position:relative}
@@ -150,6 +150,8 @@ tbody tr:hover{background:var(--panel2)}
 .c-act{width:40px;text-align:right}
 td.mono{font-family:var(--mono);font-size:12.5px}
 .g{color:var(--ok)} .y{color:var(--warn)} .r{color:var(--bad)}
+.speed-untested{display:inline-block;padding:1px 5px;border:1px solid var(--warn);
+  border-radius:4px;color:var(--warn);font-size:11px;line-height:1.5}
 .copy{background:none;border:0;color:var(--faint);cursor:pointer;padding:2px 4px;border-radius:3px}
 .copy:hover{color:var(--accent);background:var(--panel)}
 .empty{padding:40px;text-align:center;color:var(--faint);font-size:13px}

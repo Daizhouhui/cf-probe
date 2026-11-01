@@ -14,6 +14,7 @@ const state = {
   pool: 1000,      // 候选 IP 数量，0 表示不限
   httping: false,  // 用真实 HTTP 请求测延迟
   noDL: false,     // 跳过下载测速
+  speedFilter: false, // 是否只显示符合速度条件的结果
 };
 
 // ── 提示 ──────────────────────────────────────────
@@ -83,7 +84,10 @@ function renderColoList(q) {
 }
 
 // ── 结果表 ────────────────────────────────────────
-function fmtSpeed(v) {
+function fmtSpeed(v, tested) {
+  if (!tested) {
+    return '<span class="speed-untested" title="尚未执行下载测速">未测速</span>';
+  }
   const cls = v >= 5 ? 'g' : v >= 1 ? 'y' : 'r';
   return `<span class="${cls}">${v.toFixed(2)}</span>`;
 }
@@ -116,6 +120,12 @@ function visibleRows() {
   const speedMax = filterNumber('filterSpeedMax');
   const lossMax = filterNumber('filterLossMax');
   let rows = state.results;
+
+  // 如果启用了速度筛选，只显示符合速度条件的结果
+  if (state.speedFilter) {
+    rows = rows.filter(r => r.speed_qualified);
+  }
+
   rows = rows.filter(r =>
     (delayMin === null || r.delay >= delayMin) &&
     (delayMax === null || r.delay <= delayMax) &&
@@ -159,9 +169,9 @@ function renderTable() {
       `<td class="mono">${r.ip}</td>` +
       `<td class="c-num mono">${r.port}</td>` +
       `<td class="c-num mono">${fmtDelay(r.delay)}</td>` +
-      `<td class="c-num mono">${fmtSpeed(r.speed)}</td>` +
+      `<td class="c-num mono">${fmtSpeed(r.speed, r.speed_tested)}</td>` +
       `<td class="c-num mono">${(r.loss_rate * 100).toFixed(0)}%</td>` +
-      `<td>${r.colo_name || '-'}${r.colo ? ' <code style="opacity:.6">' + r.colo + '</code>' : ''}</td>` +
+      `<td title="${r.colo ? '' : '未获取到 Cloudflare 机房码'}">${r.colo_name || '-'}${r.colo ? ' <code style="opacity:.6">' + r.colo + '</code>' : ''}</td>` +
       `<td class="c-act"><button class="copy" title="复制 IP:端口">⧉</button></td>`;
     tr.querySelector('.copy').onclick = () => {
       navigator.clipboard.writeText(`${r.ip}:${r.port}`).then(
@@ -171,9 +181,30 @@ function renderTable() {
     };
     tb.appendChild(tr);
   });
-  $('#statResult').textContent = rows.length === state.results.length
-    ? '结果 ' + state.results.length
-    : `结果 ${rows.length}/${state.results.length}`;
+
+  // 计算符合速度条件的数量
+  const speedQualifiedCount = state.results.filter(r => r.speed_qualified).length;
+
+  // 更新结果显示
+  let resultText;
+  if (state.speedFilter) {
+    // 如果启用了速度筛选，显示符合条件的数量
+    if (speedQualifiedCount === state.results.length) {
+      resultText = `结果 ${rows.length}`;
+    } else {
+      resultText = `结果 ${rows.length}/${speedQualifiedCount}(速度符合:${speedQualifiedCount}/${state.results.length})`;
+    }
+  } else {
+    // 未启用速度筛选，显示总数和速度符合数
+    if (speedQualifiedCount > 0 && speedQualifiedCount !== state.results.length) {
+      resultText = `结果 ${rows.length}/${state.results.length}(速度符合:${speedQualifiedCount})`;
+    } else {
+      resultText = rows.length === state.results.length
+        ? '结果 ' + state.results.length
+        : `结果 ${rows.length}/${state.results.length}`;
+    }
+  }
+  $('#statResult').textContent = resultText;
 }
 
 function csvCell(value) {
@@ -290,7 +321,7 @@ function connectEvents() {
       const current = Number.isFinite(Number(e.current)) ? Number(e.current) : 0;
       let status = e.total > 0 ? `${e.message} ${current}/${e.total}` : e.message;
       if (e.match_total > 0) {
-        const label = e.stage === 'ping' ? '延迟符合' : '速度符合';
+        const label = e.stage === 'ping' ? '延迟符合' : '下载速度符合';
         status += `(${label}:${e.matched || 0}/${e.match_total})`;
       }
       $('#statusText').textContent = status;
@@ -309,7 +340,14 @@ function connectEvents() {
       setProgress(1, 1); // 收到 100% 再消失，别停在半截
       setRunning(false, true);
       setTimeout(() => { if (!state.running) setRunning(false); }, 600);
-      toast(`测速完成，${state.results.length} 个结果`, 'ok');
+
+      // 计算符合速度条件的数量
+      const speedQualifiedCount = state.results.filter(r => r.speed_qualified).length;
+      let toastMsg = `测速完成，${state.results.length} 个结果`;
+      if (speedQualifiedCount > 0 && speedQualifiedCount !== state.results.length) {
+        toastMsg += `(速度符合:${speedQualifiedCount})`;
+      }
+      toast(toastMsg, 'ok');
     } else if (e.type === 'error') {
       setRunning(false);
       $('#statusDot').className = 'dot err';
@@ -844,6 +882,11 @@ async function removeCron() {
     const open = panel.classList.contains('hidden');
     panel.classList.toggle('hidden', !open);
     $('#btnResultFilter').setAttribute('aria-expanded', String(open));
+  };
+  $('#btnSpeedFilter').onclick = () => {
+    state.speedFilter = !state.speedFilter;
+    $('#btnSpeedFilter').classList.toggle('active', state.speedFilter);
+    renderTable();
   };
   ['filterDelayMin', 'filterDelayMax', 'filterSpeedMin', 'filterSpeedMax', 'filterLossMax', 'filterColo']
     .forEach(id => {

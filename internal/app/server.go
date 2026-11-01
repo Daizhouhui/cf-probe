@@ -31,7 +31,11 @@ func NewServer() *Server {
 func (s *Server) routes() {
 	sub, err := fs.Sub(webFS, "web")
 	if err == nil {
-		s.mux.Handle("/", http.FileServer(http.FS(sub)))
+		fileServer := http.FileServer(http.FS(sub))
+		s.mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-cache")
+			fileServer.ServeHTTP(w, r)
+		}))
 	}
 	s.mux.HandleFunc("/api/colos", s.handleColos)
 	s.mux.HandleFunc("/api/config", s.handleConfig)
@@ -54,6 +58,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(v)
 }

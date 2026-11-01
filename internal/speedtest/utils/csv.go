@@ -47,8 +47,9 @@ type PingData struct {
 
 type CloudflareIPData struct {
 	*PingData
-	lossRate      float32
-	DownloadSpeed float64
+	lossRate       float32
+	DownloadSpeed  float64
+	DownloadTested bool
 }
 
 // 计算丢包率

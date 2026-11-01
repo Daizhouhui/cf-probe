@@ -69,12 +69,20 @@ func TestDownloadEmitsResultsOneByOne(t *testing.T) {
 	ips := pointKernelAt(t, srv)
 	TestCount = len(ips)
 
-	var got int
-	OnSpeedResult = func(utils.CloudflareIPData) { got++ }
+	var got, untested int
+	OnSpeedResult = func(d utils.CloudflareIPData) {
+		got++
+		if !d.DownloadTested {
+			untested++
+		}
+	}
 
 	set := TestDownloadSpeed(pingSet(ips))
 	if got != len(ips) {
 		t.Errorf("应逐条回调 %d 次，实际 %d 次", len(ips), got)
+	}
+	if untested != 0 {
+		t.Errorf("实际执行下载测速的结果应标记为已测速，仍有 %d 条未标记", untested)
 	}
 	if len(set) == 0 {
 		t.Error("结果不该为空")
