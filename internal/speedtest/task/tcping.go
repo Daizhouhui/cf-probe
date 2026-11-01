@@ -1,0 +1,188 @@
+package task
+
+import (
+	"fmt"
+	"net"
+	"sort"
+	"strconv"
+	"sync"
+	"time"
+
+	"github.com/DaiZhouHui/cf-probe/internal/speedtest/utils"
+)
+
+const (
+	tcpConnectTimeout = time.Second * 1
+	maxRoutine        = 1000
+	defaultRoutines   = 200
+	defaultPort       = 443
+	defaultPingTimes  = 4
+)
+
+var (
+	Routines      = defaultRoutines
+	TCPPort   int = defaultPort
+	PingTimes int = defaultPingTimes
+)
+
+type Ping struct {
+	wg         *sync.WaitGroup
+	m          *sync.Mutex
+	ips        []*net.IPAddr
+	csv        utils.PingDelaySet
+	control    chan bool
+	bar        *utils.Bar
+	matched    int
+	progressMu sync.Mutex
+}
+
+func checkPingDefault() {
+	if Routines <= 0 {
+		Routines = defaultRoutines
+	}
+	if TCPPort <= 0 || TCPPort >= 65535 {
+		TCPPort = defaultPort
+	}
+	if PingTimes <= 0 {
+		PingTimes = defaultPingTimes
+	}
+}
+
+func NewPing() *Ping {
+	checkPingDefault()
+	ips := loadIPRanges()
+	return &Ping{
+		wg:      &sync.WaitGroup{},
+		m:       &sync.Mutex{},
+		ips:     ips,
+		csv:     make(utils.PingDelaySet, 0),
+		control: make(chan bool, Routines),
+		bar:     utils.NewBar(len(ips), "可用:", ""),
+	}
+}
+
+func (p *Ping) Run() utils.PingDelaySet {
+	if len(p.ips) == 0 {
+		return p.csv
+	}
+	if Httping {
+		utils.Cyan.Printf("开始延迟测速（模式：HTTP, 端口：%d, 范围：%v ~ %v ms, 丢包：%.2f)\n", TCPPort, utils.InputMinDelay.Milliseconds(), utils.InputMaxDelay.Milliseconds(), utils.InputMaxLossRate)
+	} else {
+		utils.Cyan.Printf("开始延迟测速（模式：TCP, 端口：%d, 范围：%v ~ %v ms, 丢包：%.2f)\n", TCPPort, utils.InputMinDelay.Milliseconds(), utils.InputMaxDelay.Milliseconds(), utils.InputMaxLossRate)
+	}
+	for _, ip := range p.ips {
+		if canceled() { // 用户点了停止，别再派发新的探测
+			break
+		}
+		p.wg.Add(1)
+		p.control <- false
+		go p.start(ip)
+	}
+	p.wg.Wait()
+	p.bar.Done()
+	sort.Sort(p.csv)
+	return p.csv
+}
+
+func (p *Ping) start(ip *net.IPAddr) {
+	defer p.wg.Done()
+	p.tcpingHandler(ip)
+	<-p.control
+}
+
+// bool connectionSucceed float32 time
+func (p *Ping) tcping(ip *net.IPAddr) (bool, time.Duration) {
+	startTime := time.Now()
+	var fullAddress string
+
+	// 检查是否有端口映射（反代模式）
+	port := TCPPort
+	if mappedPort, exists := PortMapping[ip.String()]; exists {
+		port = mappedPort
+	}
+
+	if isIPv4(ip.String()) {
+		fullAddress = fmt.Sprintf("%s:%d", ip.String(), port)
+	} else {
+		fullAddress = fmt.Sprintf("[%s]:%d", ip.String(), port)
+	}
+	conn, err := net.DialTimeout("tcp", fullAddress, tcpConnectTimeout)
+	if err != nil {
+		return false, 0
+	}
+	duration := time.Since(startTime)
+	// 测速只关心握手耗时，不需要优雅关闭。
+	// 主动 close 会让本地端口进入 60 秒 TIME_WAIT，
+	// 几千个候选 × 每个 ping 多次会直接耗尽临时端口池，
+	// 表现为后续连接报 "can't assign requested address"。
+	// SO_LINGER=0 让内核直接发 RST，端口立即可复用。
+	if tc, ok := conn.(*net.TCPConn); ok {
+		_ = tc.SetLinger(0)
+	}
+	_ = conn.Close()
+	return true, duration
+}
+
+// pingReceived pingTotalTime
+func (p *Ping) checkConnection(ip *net.IPAddr) (recv int, totalDelay time.Duration, colo string) {
+	if Httping {
+		recv, totalDelay, colo = p.httping(ip)
+		return
+	}
+	colo = "" // TCPing 不获取 colo
+	for i := 0; i < PingTimes; i++ {
+		if ok, delay := p.tcping(ip); ok {
+			recv++
+			totalDelay += delay
+		}
+	}
+	return
+}
+
+func (p *Ping) appendIPData(data *utils.PingData) int {
+	p.m.Lock()
+	defer p.m.Unlock()
+	result := utils.CloudflareIPData{
+		PingData: data,
+	}
+	p.csv = append(p.csv, result)
+	if utils.PassesFilters(result) {
+		p.matched++
+	}
+	return p.matched
+}
+
+func (p *Ping) matchedCount() int {
+	p.m.Lock()
+	defer p.m.Unlock()
+	return p.matched
+}
+
+// handle tcping
+func (p *Ping) tcpingHandler(ip *net.IPAddr) {
+	recv, totalDlay, colo := p.checkConnection(ip)
+	p.progressMu.Lock()
+	defer p.progressMu.Unlock()
+
+	matched := p.matchedCount()
+	if recv == 0 {
+		p.bar.GrowWithMatch(1, strconv.Itoa(matched), matched)
+		return
+	}
+	// 获取使用的端口
+	port := TCPPort
+	if mappedPort, exists := PortMapping[ip.String()]; exists {
+		port = mappedPort
+	}
+
+	data := &utils.PingData{
+		IP:       ip,
+		Sended:   PingTimes,
+		Received: recv,
+		Delay:    totalDlay / time.Duration(recv),
+		Colo:     colo,
+		Port:     port,
+	}
+	matched = p.appendIPData(data)
+	p.bar.GrowWithMatch(1, strconv.Itoa(matched), matched)
+}

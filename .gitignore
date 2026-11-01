@@ -1,0 +1,30 @@
+# 运行产物
+result.csv
+ips_ports.txt
+yx-config.json
+Cloudflare.txt
+Cloudflare_ipv6.txt
+dist/
+data/
+
+# 编译产物
+/yx
+/yx_*
+*.exe
+
+# 系统
+.DS_Store
+
+# 安卓
+android/app/build/
+android/app/libs/
+android/.gradle/
+local.properties
+*.apk
+
+#测试
+*.csv
+.vscode
+.lingma
+
+run.ps1

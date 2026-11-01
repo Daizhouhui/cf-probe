@@ -1,0 +1,11 @@
+services:
+  yx:
+    build: .
+    image: cf-probe:latest
+    container_name: cf-probe
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # 测速结果与配置持久化
+      - ./data:/data

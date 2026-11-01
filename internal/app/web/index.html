@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cloudflare 优选测速</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="dot" id="statusDot"></span>
+    <strong>Cloudflare 优选测速</strong>
+  </div>
+  <div class="topbar-right">
+    <span class="stat" id="statResult">结果 0</span>
+    <button class="btn ghost" id="btnTheme" type="button" title="切换浅色主题" aria-label="切换浅色主题">浅色</button>
+    <button class="btn ghost" id="btnCron" title="定时任务">
+      <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </button>
+    <button class="btn ghost" id="btnConfig" title="上报配置">
+      <svg viewBox="0 0 24 24" class="ico"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.14.34.2.7.19 1.06z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- 参数面板 -->
+  <aside class="panel">
+    <div class="field">
+      <label>地区（机场码）</label>
+      <div class="colo-box">
+        <input type="text" id="coloSearch" placeholder="搜索城市或代码，留空测全部" autocomplete="off">
+        <div class="colo-list" id="coloList"></div>
+      </div>
+      <div class="chips" id="coloChips"></div>
+    </div>
+
+    <div class="field">
+      <label>IP 版本</label>
+      <div class="seg" id="segIPv">
+        <button class="on" data-v="4">IPv4</button>
+        <button data-v="6">IPv6</button>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <label>测速数量</label>
+        <input type="number" id="inCount" value="50" min="1" max="100">
+      </div>
+      <div class="field">
+        <label>端口</label>
+        <input type="number" id="inPort" value="443" min="1" max="65535">
+      </div>
+      <div class="field">
+        <label>速度下限 MB/s</label>
+        <input type="number" id="inSpeed" value="5" min="0" step="0.5">
+      </div>
+      <div class="field">
+        <label>延迟上限 ms</label>
+        <input type="number" id="inDelay" value="300" min="1">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>延迟测法</label>
+      <div class="seg" id="segPing">
+        <button class="on" data-ping="tcp">TCP 握手</button>
+        <button data-ping="http">真实连接</button>
+      </div>
+      <em class="note" id="pingNote">只做 TCP 握手，快，但数字偏低</em>
+    </div>
+
+    <div class="field">
+      <label>候选 IP 数量 <span class="hint" id="poolHint"></span></label>
+      <div class="seg" id="segPool">
+        <button data-pool="500">500</button>
+        <button class="on" data-pool="1000">1000</button>
+        <button data-pool="2000">2000</button>
+        <button data-pool="0">全部</button>
+        <button data-pool="custom">自定义</button>
+      </div>
+      <input type="number" id="inPool" class="hidden" min="1" max="100000" step="100" placeholder="填个数字，比如 5000">
+      <em class="note" id="poolNote">从 Cloudflare 官方 IP 段里随机抽 1000 个来测延迟</em>
+    </div>
+
+    <div class="field">
+      <label>下载测速</label>
+      <div class="seg" id="segDL">
+        <button class="on" data-dl="on">测下载速度</button>
+        <button data-dl="off">跳过</button>
+      </div>
+      <em class="note" id="dlNote">测完延迟再下载大文件，测出真实速度</em>
+    </div>
+
+    <div class="field">
+      <label>延迟测速线程 <span class="hint" id="threadVal">200</span></label>
+      <input type="range" id="inThread" min="10" max="1000" step="10" value="200">
+    </div>
+
+    <div class="more-open">
+      <div class="field">
+        <label>测速地址</label>
+        <input type="text" id="inURL" placeholder="留空用默认（走 Cloudflare 的大文件）">
+      </div>
+      <div class="field">
+        <label>自定义 IP 段（每行一条，支持 IP:端口）</label>
+        <em class="note">不填就用 Cloudflare 官方 IP 段，填了才会覆盖掉</em>
+        <textarea id="inIPText" rows="4" placeholder="104.16.0.0/12&#10;1.1.1.1:2053"></textarea>
+        <label class="filepick">
+          <input type="file" id="inIPFile" accept=".txt,.csv,text/plain" hidden>
+          <span class="btn ghost sm">
+            <svg viewBox="0 0 24 24" class="ico"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            从文件导入
+          </span>
+          <em id="ipFileName"></em>
+        </label>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>单个 IP 测速上限</label>
+          <input type="number" id="inDLTimeout" value="6" min="1" max="120">
+          <em class="note">秒。慢的 IP 到点就跳过，不会一直耗着</em>
+        </div>
+        <div class="field">
+          <label>整轮时间上限</label>
+          <input type="number" id="inMaxRun" value="0" min="0" max="86400">
+          <em class="note">秒。0 是不限；到点就拿已测出的结果收工</em>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <div class="action-progress hidden" id="actionProgress" role="progressbar" aria-label="测速正在进行" aria-hidden="true"><i></i></div>
+      <button class="btn primary" id="btnStart">
+        <svg viewBox="0 0 24 24" class="ico"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        开始测速
+      </button>
+      <button class="btn danger hidden" id="btnStop">
+        <svg viewBox="0 0 24 24" class="ico"><rect x="6" y="6" width="12" height="12"/></svg>
+        停止
+      </button>
+    </div>
+  </aside>
+
+  <!-- 结果区 -->
+  <section class="content">
+    <div class="progress" id="progressBar"><i id="progressFill"></i></div>
+    <div class="statusline">
+      <span id="statusText">就绪，配置左侧参数后开始</span>
+    </div>
+
+    <div class="toolbar">
+      <input type="text" id="filterText" placeholder="筛选 IP 或地区" autocomplete="off">
+      <button class="btn ghost" id="btnResultFilter" type="button" aria-expanded="false" aria-controls="resultFilters">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M4 6h16M7 12h10m-7 6h4"/><circle cx="8" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="12" cy="18" r="1"/></svg>
+        筛选
+      </button>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="btnProxy" title="导入外部 IP 列表并测速">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        优选反代
+      </button>
+      <button class="btn ghost" id="btnDownload" title="下载测速结果 result.csv">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        下载
+      </button>
+      <button class="btn ghost" id="btnUploadAPI" title="上报到 Worker">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        上报 Worker
+      </button>
+      <button class="btn ghost" id="btnUploadGH" title="上传到 GitHub">
+        <svg viewBox="0 0 24 24" class="ico"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+        GitHub
+      </button>
+    </div>
+
+    <div class="result-filters hidden" id="resultFilters">
+      <label class="filter-field filter-range-field">
+        <span>延迟范围 (ms)</span>
+        <span class="filter-range">
+          <input type="number" id="filterDelayMin" min="0" step="any" placeholder="最小">
+          <span>至</span>
+          <input type="number" id="filterDelayMax" min="0" step="any" placeholder="最大">
+        </span>
+      </label>
+      <label class="filter-field filter-range-field">
+        <span>速度范围 (MB/s)</span>
+        <span class="filter-range">
+          <input type="number" id="filterSpeedMin" min="0" step="any" placeholder="最小">
+          <span>至</span>
+          <input type="number" id="filterSpeedMax" min="0" step="any" placeholder="最大">
+        </span>
+      </label>
+      <label class="filter-field filter-loss-field">
+        <span>丢包率上限 (%)</span>
+        <input type="number" id="filterLossMax" min="0" max="100" step="any" placeholder="不限制">
+      </label>
+      <label class="filter-field filter-colo-field">
+        <span>地区 / 机房码</span>
+        <input type="text" id="filterColo" placeholder="如 香港、HKG" autocomplete="off">
+      </label>
+      <button class="btn ghost filter-reset" id="btnFilterReset" type="button">清除筛选</button>
+      <button class="btn ghost" id="btnDownloadFiltered" type="button" title="下载当前筛选结果 CSV">下载</button>
+    </div>
+
+    <div class="table-wrap">
+      <table id="tbl">
+        <thead>
+          <tr>
+            <th class="c-idx">#</th>
+            <th data-sort="ip">IP</th>
+            <th class="c-num" data-sort="port">端口</th>
+            <th class="c-num" data-sort="delay">延迟</th>
+            <th class="c-num" data-sort="speed">速度</th>
+            <th class="c-num" data-sort="loss">丢包</th>
+            <th data-sort="colo">地区</th>
+            <th class="c-act"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="emptyBox">还没有测速结果</div>
+    </div>
+  </section>
+</main>
+
+<!-- 配置弹窗 -->
+<div class="mask hidden" id="mask">
+  <div class="modal">
+    <h3>上报配置</h3>
+    <div class="field">
+      <label>Worker 域名</label>
+      <input type="text" id="cfgDomain" placeholder="example.workers.dev">
+    </div>
+    <div class="field">
+      <label>UUID 或自定义路径</label>
+      <input type="text" id="cfgUUID" placeholder="访问面板用的那串">
+    </div>
+    <hr>
+    <div class="field">
+      <label>GitHub 仓库</label>
+      <input type="text" id="cfgRepo" placeholder="owner/repo">
+    </div>
+    <div class="field">
+      <label>GitHub Token <span class="hint" id="tokenHint"></span></label>
+      <input type="password" id="cfgToken" placeholder="留空则沿用已保存的">
+    </div>
+    <div class="field">
+      <label>仓库内文件路径</label>
+      <input type="text" id="cfgPath" placeholder="cloudflare_ips.txt">
+    </div>
+    <div class="field">
+      <label>上报数量</label>
+      <input type="number" id="cfgLimit" placeholder="留空上传全部" min="1" max="1000">
+    </div>
+    <label class="check"><input type="checkbox" id="cfgClear" checked> 上报前清空 Worker 已有 IP</label>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btnCfgClose">取消</button>
+      <button class="btn primary" id="btnCfgSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 优选反代弹窗 -->
+<div class="mask hidden" id="proxyMask">
+  <div class="modal">
+    <h3>优选反代</h3>
+    <em class="note">拿现成的 IP 列表来测：FOFA 导出的资产 CSV、别人分享的测速 CSV，或每行 IP:端口 的纯列表。CSV 只读 ip 和 port 两列，其他列不管</em>
+    <div class="field">
+      <label>IP 来源 <span class="hint" id="proxyCount"></span></label>
+      <textarea id="proxyText" rows="7" placeholder="104.20.18.132:443&#10;172.70.96.220:2053&#10;&#10;或直接粘贴带 ip,port 列的 CSV"></textarea>
+      <label class="filepick">
+        <input type="file" id="proxyFile" accept=".txt,.csv,text/plain" hidden>
+        <span class="btn ghost sm">
+          <svg viewBox="0 0 24 24" class="ico"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          从文件导入
+        </span>
+        <em id="proxyFileName"></em>
+      </label>
+    </div>
+    <div class="field">
+      <label>取前 N 条 <span class="hint">留空全取</span></label>
+      <input type="number" id="proxyTake" min="1" max="10000" placeholder="留空则全部">
+    </div>
+    <em class="note">测的就是你给的这批 IP，不做抽样。左侧的地区、延迟测法、下载测速这些参数照常生效</em>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btnProxyClose">取消</button>
+      <button class="btn primary" id="btnProxyRun">生成并测速</button>
+    </div>
+  </div>
+</div>
+
+<!-- 定时任务弹窗 -->
+<div class="mask hidden" id="cronMask">
+  <div class="modal">
+    <h3>定时任务</h3>
+    <div class="field">
+      <label>已有任务 <span class="hint" id="cronHint"></span></label>
+      <div class="cron-list" id="cronList"></div>
+    </div>
+    <hr>
+    <div class="field">
+      <label>执行频率</label>
+      <div class="presets" id="cronPresets">
+        <button data-cron="0 */6 * * *">每 6 小时</button>
+        <button data-cron="0 */12 * * *">每 12 小时</button>
+        <button data-cron="0 4 * * *">每天 4 点</button>
+        <button data-cron="0 4 * * 1">每周一 4 点</button>
+      </div>
+      <input type="text" id="cronSchedule" placeholder="0 */6 * * *" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>执行的命令参数
+        <button class="btn ghost sm hidden" id="btnCronSync" title="按当前左侧设置重新生成">重新生成</button>
+      </label>
+      <textarea id="cronArgs" rows="3" placeholder="test -n 10 -sl 2" spellcheck="false"></textarea>
+      <em class="note" id="cronArgsNote">按左侧当前设置生成，可以直接改</em>
+    </div>
+    <label class="check"><input type="checkbox" id="cronReplace" checked> 添加前先清掉本工具已有的任务</label>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btnCronRemove">清空任务</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="btnCronClose">关闭</button>
+      <button class="btn primary" id="btnCronAdd">添加</button>
+    </div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+name: 构建 APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: 构建 APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: 安装 gomobile
+        run: |
+          go install golang.org/x/mobile/cmd/gomobile@latest
+          go install golang.org/x/mobile/cmd/gobind@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: 准备 Android SDK 组件
+        run: |
+          echo "ANDROID_NDK_HOME=$(ls -d "$ANDROID_HOME"/ndk/* | head -1)" >> "$GITHUB_ENV"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-26" > /dev/null
+
+      - name: 编译 Go 引擎
+        env:
+          # gobind 生成的 Java 是 UTF-8，强制 javac 按 UTF-8 读取
+          JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8
+        run: |
+          mkdir -p android/app/libs
+          gomobile bind -target=android/arm64 -androidapi 26 -o android/app/libs/yx.aar ./androidlib
+
+      - name: 构建 APK
+        run: |
+          cd android
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          gradle assembleRelease --console=plain
+
+      # APK 全程由公开流水线构建，附校验和供核对，
+      # 避免第三方分发的包被杀软误报时说不清来源
+      - name: 生成校验和
+        run: |
+          cd android/app/build/outputs/apk/release
+          sha256sum app-release.apk | tee checksums.txt
+
+      - name: 发布 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/checksums.txt
+          generate_release_notes: true
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: yx-android-apk
+          path: |
+            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/checksums.txt
