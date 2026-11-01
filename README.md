@@ -214,7 +214,7 @@ chmod +x yx_linux_amd64
 - 使用 -colo 指定优质节点（如 HKG,NRT,SIN）
 
 ## 相关项目
-
+-[byJoey/yx-tools](https://github.com/byJoey/yx-tools)  -基于该项目二次修改
 - [XIU2/CloudflareSpeedTest](https://github.com/XIU2/CloudflareSpeedTest) - 测速内核来源
 
 ## 开源协议
