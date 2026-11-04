@@ -8,7 +8,8 @@
 - 支持全球 97 个 Cloudflare 数据中心，可按地区筛选
 - 原生支持 IP:端口 格式，适配反代场景
 - 提供 Web 界面和命令行两种模式
-- 支持结果上报到 cfnew 面板或 GitHub 仓库
+- CSV 下载、反代列表导出及 cfnew/GitHub 上报仅包含下载速度达标的节点
+- Web 结果计数显示下载速度达标节点数
 - 内置 Cron 定时任务支持
 - 提供 Android APK 和 Docker 镜像
 

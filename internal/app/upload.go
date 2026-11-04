@@ -92,6 +92,7 @@ func UploadToAPI(ctx context.Context, t APITarget, rs []Result, limit int, clear
 	if strings.TrimSpace(t.Domain) == "" || strings.TrimSpace(t.UUID) == "" {
 		return 0, fmt.Errorf("请先填写 Worker 域名和 UUID")
 	}
+	rs = filterSpeedQualified(rs)
 	if limit > 0 && limit < len(rs) {
 		rs = rs[:limit]
 	}
@@ -162,6 +163,7 @@ func UploadToGitHub(ctx context.Context, t GitHubTarget, rs []Result, limit int)
 	if path == "" {
 		path = "cloudflare_ips.txt"
 	}
+	rs = filterSpeedQualified(rs)
 	if limit > 0 && limit < len(rs) {
 		rs = rs[:limit]
 	}

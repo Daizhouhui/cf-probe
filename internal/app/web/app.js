@@ -189,25 +189,14 @@ function renderTable() {
   const speedQualifiedCount = state.results.filter(r => r.speed_qualified).length;
 
   // 更新结果显示
-  let resultText;
-  if (state.speedFilter) {
-    // 如果启用了速度筛选，显示符合条件的数量
-    if (speedQualifiedCount === state.results.length) {
-      resultText = `结果 ${rows.length}`;
-    } else {
-      resultText = `结果 ${rows.length}/${speedQualifiedCount}(速度符合:${speedQualifiedCount}/${state.results.length})`;
-    }
-  } else {
-    // 未启用速度筛选，显示总数和速度符合数
-    if (speedQualifiedCount > 0 && speedQualifiedCount !== state.results.length) {
-      resultText = `结果 ${rows.length}/${state.results.length}(速度符合:${speedQualifiedCount})`;
-    } else {
-      resultText = rows.length === state.results.length
-        ? '结果 ' + state.results.length
+  const hasSpeedResults = state.results.some(r => r.speed_tested);
+  $('#statResult').textContent = state.speedFilter
+    ? `结果 ${rows.length}`
+    : hasSpeedResults
+      ? `结果 ${speedQualifiedCount}`
+      : rows.length === state.results.length
+        ? `结果 ${state.results.length}`
         : `结果 ${rows.length}/${state.results.length}`;
-    }
-  }
-  $('#statResult').textContent = resultText;
 }
 
 function csvCell(value) {
@@ -216,9 +205,9 @@ function csvCell(value) {
 }
 
 function downloadFilteredCSV() {
-  const rows = visibleRows();
+  const rows = visibleRows().filter(r => r.speed_qualified);
   if (!rows.length) {
-    toast('当前筛选没有可下载的数据', 'err');
+    toast('当前筛选没有符合速度条件的数据', 'err');
     return;
   }
   const data = [
@@ -351,11 +340,7 @@ function connectEvents() {
 
       // 计算符合速度条件的数量
       const speedQualifiedCount = state.results.filter(r => r.speed_qualified).length;
-      let toastMsg = `测速完成，${state.results.length} 个结果`;
-      if (speedQualifiedCount > 0 && speedQualifiedCount !== state.results.length) {
-        toastMsg += `(速度符合:${speedQualifiedCount})`;
-      }
-      toast(toastMsg, 'ok');
+      toast(`测速完成，结果 ${speedQualifiedCount}`, 'ok');
     } else if (e.type === 'error') {
       setRunning(false);
       $('#statusDot').className = 'dot err';

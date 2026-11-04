@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"io"
@@ -10,7 +11,7 @@ import (
 	"strings"
 )
 
-var csvHeader = []string{"IP 地址", "已发送", "已接收", "丢包率", "平均延迟", "下载速度(MB/s)", "地区码", "端口"}
+var csvHeader = []string{"IP 地址", "已发送", "已接收", "丢包率", "平均延迟", "下载速度(MB/s)", "地区码", "端口", "下载测速已完成", "速度符合"}
 
 // WriteCSV 导出测速结果，列顺序与测速内核保持一致
 func WriteCSV(path string, rs []Result) error {
@@ -22,8 +23,19 @@ func WriteCSV(path string, rs []Result) error {
 		return err
 	}
 	defer f.Close()
-	w := csv.NewWriter(f)
-	defer w.Flush()
+	return writeCSV(f, rs)
+}
+
+func encodeCSV(rs []Result) ([]byte, error) {
+	var out bytes.Buffer
+	if err := writeCSV(&out, rs); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+func writeCSV(dst io.Writer, rs []Result) error {
+	w := csv.NewWriter(dst)
 	if err := w.Write(csvHeader); err != nil {
 		return err
 	}
@@ -37,10 +49,16 @@ func WriteCSV(path string, rs []Result) error {
 			strconv.FormatFloat(r.Speed, 'f', 2, 64),
 			orNA(r.Colo),
 			strconv.Itoa(r.Port),
+			strconv.FormatBool(r.SpeedTested),
+			strconv.FormatBool(r.SpeedQualified),
 		}
 		if err := w.Write(row); err != nil {
 			return err
 		}
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -126,6 +144,14 @@ func parseCSV(src io.Reader, name string) ([]Result, error) {
 		loss, _ := strconv.ParseFloat(pick(row, "丢包率"), 64)
 		sent, _ := strconv.Atoi(pick(row, "已发送"))
 		recv, _ := strconv.Atoi(pick(row, "已接收"))
+		speedTested, _ := strconv.ParseBool(pick(row, "下载测速已完成"))
+		speedQualified, _ := strconv.ParseBool(pick(row, "速度符合"))
+		_, hasSpeedTestedColumn := idx[normalizeHeader("下载测速已完成")]
+		_, hasSpeedQualifiedColumn := idx[normalizeHeader("速度符合")]
+		if !hasSpeedTestedColumn && !hasSpeedQualifiedColumn {
+			speedTested = speed > 0
+			speedQualified = speedTested && speed >= LoadConfig().SpeedLimit
+		}
 		colo := pick(row, "地区码")
 		if colo == "N/A" {
 			colo = ""
@@ -133,10 +159,21 @@ func parseCSV(src io.Reader, name string) ([]Result, error) {
 		out = append(out, Result{
 			IP: ip, Port: port, Sent: sent, Received: recv,
 			LossRate: loss, Delay: delay, Speed: speed,
+			SpeedTested: speedTested, SpeedQualified: speedQualified,
 			Colo: colo, ColoName: ColoName(colo),
 		})
 	}
 	return out, nil
+}
+
+func filterSpeedQualified(rs []Result) []Result {
+	qualified := make([]Result, 0, len(rs))
+	for _, result := range rs {
+		if result.SpeedQualified {
+			qualified = append(qualified, result)
+		}
+	}
+	return qualified
 }
 
 // hasIPColumn 判断首行是不是带 ip 列的表头。

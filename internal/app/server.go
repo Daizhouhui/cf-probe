@@ -272,6 +272,7 @@ func (s *Server) handleProxyList(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	rs = filterSpeedQualified(rs)
 	n, err := WriteProxyList(ProxyListFile, rs, in.Limit)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
@@ -461,12 +462,31 @@ func (s *Server) handleProxyImport(w http.ResponseWriter, r *http.Request) {
 // handleDownload 下载测速结果或反代列表
 func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	kind := r.URL.Query().Get("kind")
+	if kind != "proxy" {
+		rs, ok := s.resultsOrCSV(w)
+		if !ok {
+			return
+		}
+		rs = filterSpeedQualified(rs)
+		if len(rs) == 0 {
+			writeErr(w, http.StatusNotFound, "没有符合下载速度条件的结果")
+			return
+		}
+		data, err := encodeCSV(rs)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="result-qualified.csv"`)
+		_, _ = w.Write(append([]byte{0xef, 0xbb, 0xbf}, data...))
+		return
+	}
+
 	var name string
 	switch kind {
 	case "proxy":
 		name = ProxyListFile
-	default:
-		name = ResultFile
 	}
 	data, err := os.ReadFile(DataPath(name))
 	if err != nil {

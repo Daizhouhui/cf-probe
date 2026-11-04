@@ -19,7 +19,7 @@ import (
 	"github.com/DaiZhouHui/cf-probe/internal/app"
 )
 
-var version = ""
+var version = "1.0.5"
 
 const usage = `Cloudflare 优选 IP 测速工具 v%s
 

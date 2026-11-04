@@ -11,7 +11,10 @@ import (
 func makeResults(n int) []Result {
 	out := make([]Result, 0, n)
 	for i := 0; i < n; i++ {
-		out = append(out, Result{IP: "1.1.1." + string(rune('0'+i%10)), Port: 443, Speed: 5, Colo: "HKG"})
+		out = append(out, Result{
+			IP: "1.1.1." + string(rune('0'+i%10)), Port: 443, Speed: 5, Colo: "HKG",
+			SpeedTested: true, SpeedQualified: true,
+		})
 	}
 	return out
 }
@@ -53,6 +56,34 @@ func TestUploadLimitZeroSendsAll(t *testing.T) {
 				t.Fatalf("want %d, 返回 %d, 实际发出 %d", c.want, n, got)
 			}
 		})
+	}
+}
+
+func TestUploadAPIOnlySendsSpeedQualifiedResults(t *testing.T) {
+	var got []apiItem
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			_ = json.NewDecoder(r.Body).Decode(&got)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"success":true}`))
+	}))
+	defer srv.Close()
+
+	results := []Result{
+		{IP: "1.1.1.1", Port: 443, Speed: 1, SpeedTested: true, SpeedQualified: false},
+		{IP: "1.1.1.2", Port: 443, Speed: 8, SpeedTested: true, SpeedQualified: true},
+		{IP: "1.1.1.3", Port: 443, Speed: 0, SpeedTested: false, SpeedQualified: false},
+		{IP: "1.1.1.4", Port: 443, Speed: 9, SpeedTested: true, SpeedQualified: true},
+	}
+	n, err := UploadToAPI(context.Background(), APITarget{
+		Domain: "http://" + srv.Listener.Addr().String(), UUID: "u",
+	}, results, 1, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || len(got) != 1 || got[0].IP != "1.1.1.2" {
+		t.Fatalf("only speed-qualified nodes should be uploaded: n=%d, got=%+v", n, got)
 	}
 }
 
