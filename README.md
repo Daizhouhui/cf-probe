@@ -21,10 +21,19 @@
 
 
 **Windows:**
+```bash
 解压后直接运行 `CfProbe-Windows-Amd64.exe`
+```
+
+
+
 
 **adroid APK:**
+```bash
 下载安卓APK安装运行 `CfProbe-Android.apk`
+```
+
+
 
 **Linux/macOS:**
 ```bash
