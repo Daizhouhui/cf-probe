@@ -19,6 +19,13 @@
 
 从 [Releases](https://github.com/DaiZhouHui/cf-probe/releases) 下载对应平台版本：
 
+
+**Windows:**
+解压后直接运行 `CfProbe-Windows-Amd64.exe`
+
+**adroid APK:**
+下载安卓APK安装运行 `CfProbe-Android.apk`
+
 **Linux/macOS:**
 ```bash
 tar -xzf CfProbe-Linux-Amd64.tar.gz
@@ -26,10 +33,8 @@ chmod +x CfProbe-Linux-Amd64
 ./CfProbe-Linux-Amd64
 ```
 
-**Windows:**
-解压后直接运行 `CfProbe-Windows-Amd64.exe`
 
-**Docker:**
+**Docker(已弃用):**
 ```bash
 docker run -d \
   --name cf-probe \
