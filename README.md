@@ -130,10 +130,6 @@ keytool -genkeypair -v -keystore "$HOME\cf-probe-release.jks" -storetype JKS -al
 
 ### 结果上报
 
-上报到 cfnew API:
-```bash
-./yx test -n 10 -upload api -domain your.domain.com -uuid YOUR_UUID -clear
-```
 
 推送到 GitHub:
 ```bash
@@ -192,7 +188,6 @@ keytool -genkeypair -v -keystore "$HOME\cf-probe-release.jks" -storetype JKS -al
 | 参数 | 说明 | 必填 |
 |------|------|------|
 | -upload | 上报方式：api 或 github | 是 |
-| -domain | cfnew Worker 域名 | API 模式 |
 | -uuid | cfnew UUID | API 模式 |
 | -repo | GitHub 仓库（owner/repo） | GitHub 模式 |
 | -token | GitHub Token | GitHub 模式 |
