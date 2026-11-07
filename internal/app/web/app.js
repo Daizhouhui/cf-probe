@@ -141,7 +141,10 @@ function updateFilterButtonState() {
   $('#btnResultFilter').classList.toggle('active', active);
 }
 
-function visibleRows() {
+// opt.ignoreSpeedFilter：不受顶部「速度符合」按钮影响
+// opt.speedTestedOnly：只要测过下载速度的节点（含未达标的）
+function visibleRows(opt) {
+  opt = opt || {};
   const q = $('#filterText').value.trim().toLowerCase();
   const colo = $('#filterColo').value.trim().toLowerCase();
   const delayMin = filterNumber('filterDelayMin');
@@ -152,8 +155,11 @@ function visibleRows() {
   let rows = state.results;
 
   // 如果启用了速度筛选，只显示符合速度条件的结果
-  if (state.speedFilter) {
+  if (!opt.ignoreSpeedFilter && state.speedFilter) {
     rows = rows.filter(r => r.speed_qualified);
+  }
+  if (opt.speedTestedOnly) {
+    rows = rows.filter(r => r.speed_tested);
   }
 
   rows = rows.filter(r =>
@@ -217,15 +223,15 @@ function renderTable() {
   // 计算符合速度条件的数量
   const speedQualifiedCount = state.results.filter(r => r.speed_qualified).length;
 
-  // 更新结果显示
+  // 更新结果显示。一旦有筛选条件生效，就显示「可见/总数」，
+  // 手机端被键盘挡住表格时，靠顶部的数字也能看出筛选是实时的。
   const hasSpeedResults = state.results.some(r => r.speed_tested);
-  $('#statResult').textContent = state.speedFilter
-    ? `结果 ${rows.length}`
+  const filtered = state.speedFilter || rows.length !== state.results.length;
+  $('#statResult').textContent = filtered
+    ? `结果 ${rows.length}/${state.results.length}`
     : hasSpeedResults
       ? `结果 ${speedQualifiedCount}`
-      : rows.length === state.results.length
-        ? `结果 ${state.results.length}`
-        : `结果 ${rows.length}/${state.results.length}`;
+      : `结果 ${state.results.length}`;
 }
 
 function csvCell(value) {
@@ -234,19 +240,18 @@ function csvCell(value) {
 }
 
 function downloadFilteredCSV() {
-  const rows = visibleRows().filter(r => r.speed_qualified);
+  // 筛选下载只看筛选面板里的条件：不受「速度符合」按钮影响，
+  // 但下载速度没测过的节点没有意义，排除掉。
+  const rows = visibleRows({ ignoreSpeedFilter: true, speedTestedOnly: true });
   if (!rows.length) {
-    toast('当前筛选没有符合速度条件的数据', 'err');
+    toast('当前筛选没有可下载的结果', 'err');
     return;
   }
   const data = [
-    ['IP 地址', '已发送', '已接收', '丢包率', '平均延迟', '下载速度(MB/s)', '地区码', '端口'],
-    ...rows.map(r => [
-      r.ip, r.sent, r.received, Number(r.loss_rate).toFixed(2),
-      Number(r.delay).toFixed(2), Number(r.speed).toFixed(2), r.colo || 'N/A', r.port,
-    ]),
-  ].map(row => row.map(csvCell).join(',')).join('\r\n');
-  saveText('result-filtered.csv', '\ufeff' + data);
+    'ip,port,region',
+    ...rows.map(r => [r.ip, r.port, r.colo || ''].map(csvCell).join(',')),
+  ].join('\r\n');
+  saveText(saveName('result-filtered'), data);
 }
 
 function applyTheme(theme) {
@@ -695,13 +700,22 @@ function pickCustomThread() {
 // Android WebView 不稳的地方在于 <a download>：不一定触发下载监听，
 // 所以统一先 fetch 内容，再交给 JS 桥保存；桌面浏览器走 Blob 下载。
 // fetch 还能把服务端的错误提示（比如没有符合条件的结果）显示出来。
+function saveName(base) {
+  // 安卓 WebView 对 .csv 的保存/打开支持不稳，沿用旧版的 .csv.txt
+  return window.AndroidBridge ? base + '.csv.txt' : base + '.csv';
+}
+
 function saveText(name, content) {
   const bridge = window.AndroidBridge;
   if (bridge && typeof bridge.saveTextFile === 'function') {
-    bridge.saveTextFile(name, content);
-    return;
+    try {
+      bridge.saveTextFile(name, content);
+      return;
+    } catch (_) {
+      toast('原生保存失败，改用浏览器下载', 'err');
+    }
   }
-  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -726,8 +740,8 @@ async function downloadCSV(url, name) {
     toast(e.message === 'Failed to fetch' ? '下载失败，请重试' : e.message, 'err');
     return;
   }
-  // fetch 的 text() 会吃掉 BOM，保存时补回来，Excel 打开才不乱码
-  saveText(name, '\ufeff' + data.replace(/^\ufeff/, ''));
+  // 内容只有 ip/port/region，去掉服务端可能带的 BOM
+  saveText(saveName(name), data.replace(/^\ufeff/, ''));
 }
 
 // ── 自定义 IP 段文件导入 ──────────────────────────
@@ -998,6 +1012,9 @@ async function removeCron() {
     const panel = $('#resultFilters');
     const open = panel.classList.contains('hidden');
     panel.classList.toggle('hidden', !open);
+    // 手机端进入筛选模式：收起左侧参数面板，把结果列表让出来，
+    // 这样输入条件时能直接看到列表实时变化。
+    document.body.classList.toggle('filter-open', open);
     $('#btnResultFilter').setAttribute('aria-expanded', String(open));
   };
   $('#btnSpeedFilter').onclick = () => {
@@ -1058,7 +1075,7 @@ async function removeCron() {
   });
   $('#btnUploadAPI').onclick = uploadAPI;
   $('#btnUploadGH').onclick = uploadGitHub;
-  $('#btnDownload').onclick = () => downloadCSV('/api/download?kind=result', 'result-qualified.csv');
+  $('#btnDownload').onclick = () => downloadCSV('/api/download?kind=result', 'result');
   $('#btnDownloadFiltered').onclick = downloadFilteredCSV;
   $('#btnTheme').onclick = toggleTheme;
 

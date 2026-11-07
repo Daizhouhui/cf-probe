@@ -79,11 +79,7 @@ class MainActivity : Activity() {
                 conn.disconnect()
                 val where = saveToDownloads(name, data)
                 runOnUiThread {
-                    Toast.makeText(
-                        this,
-                        if (where != null) "已保存 $name\n$where" else "保存失败",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    Toast.makeText(this, "已保存 $name\n$where", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -93,8 +89,12 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    // 界面里能导出的 CSV：完整结果与筛选结果
-    private val allowedDownloads = setOf("result-filtered.csv", "result-qualified.csv")
+    // 界面里能导出的文件：完整结果与筛选结果。
+    // 安卓统一存成 .csv.txt，部分机型和文件管理器对 .csv 的识别不稳定。
+    private val allowedDownloads = setOf(
+        "result.csv.txt", "result-filtered.csv.txt",
+        "result.csv", "result-filtered.csv"
+    )
 
     private inner class DownloadBridge {
         @JavascriptInterface
@@ -106,13 +106,23 @@ class MainActivity : Activity() {
                 return
             }
             Thread {
-                val where = saveToDownloads(name, content.toByteArray(Charsets.UTF_8))
-                runOnUiThread {
-                    Toast.makeText(
-                        this@MainActivity,
-                        if (where != null) "已保存 $name\n$where" else "保存失败",
-                        Toast.LENGTH_LONG
-                    ).show()
+                try {
+                    val where = saveToDownloads(name, content.toByteArray(Charsets.UTF_8))
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "已保存 $name\n$where",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                } catch (e: Exception) {
+                    runOnUiThread {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "保存失败: ${e.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
             }.start()
         }
@@ -126,31 +136,37 @@ class MainActivity : Activity() {
         return if (url.contains("kind=proxy")) "ips_ports.txt" else "result.csv"
     }
 
-    private fun saveToDownloads(name: String, data: ByteArray): String? {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Android 10+ 走 MediaStore 存进系统「下载」，无需任何权限
-                val values = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, name)
-                    put(
-                        MediaStore.Downloads.MIME_TYPE,
-                        if (name.endsWith(".csv", ignoreCase = true)) "text/csv" else "text/plain"
-                    )
-                }
-                val uri =
-                    contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
-                        ?: return null
-                contentResolver.openOutputStream(uri)?.use { it.write(data) } ?: return null
-                "（系统下载目录）"
-            } else {
-                // Android 8/9：存应用外部专属目录，同样免权限
-                val dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-                File(dir, name).writeBytes(data)
-                dir.absolutePath
+    private fun saveToDownloads(name: String, data: ByteArray): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Android 10+ 走 MediaStore 存进系统「下载」，无需任何权限。
+            // 按官方推荐的 IS_PENDING 流程写，避免文件管理器只看到空文件。
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, name)
+                put(
+                    MediaStore.Downloads.MIME_TYPE,
+                    if (name.endsWith(".csv", ignoreCase = true)) "text/csv" else "text/plain"
+                )
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.Downloads.IS_PENDING, 1)
             }
-        } catch (_: Exception) {
-            null
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("无法创建下载文件")
+            try {
+                contentResolver.openOutputStream(uri)?.use { it.write(data) }
+                    ?: throw IllegalStateException("无法写入下载文件")
+                values.clear()
+                values.put(MediaStore.Downloads.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+            } catch (e: Exception) {
+                contentResolver.delete(uri, null, null)
+                throw e
+            }
+            return "（系统下载目录）"
         }
+        // Android 8/9：存应用外部专属目录，同样免权限
+        val dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: filesDir
+        File(dir, name).writeBytes(data)
+        return dir.absolutePath
     }
 
     @Deprecated("Deprecated in Java")

@@ -34,6 +34,27 @@ func encodeCSV(rs []Result) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
+// encodeNodeCSV 导出给外部客户端用的精简列表：ip,port,region。
+// 完整字段仍保留在结果文件里，只有下载接口用这个格式。
+func encodeNodeCSV(rs []Result) ([]byte, error) {
+	var out bytes.Buffer
+	w := csv.NewWriter(&out)
+	if err := w.Write([]string{"ip", "port", "region"}); err != nil {
+		return nil, err
+	}
+	for _, r := range rs {
+		port := r.Port
+		if port <= 0 {
+			port = 443
+		}
+		if err := w.Write([]string{r.IP, strconv.Itoa(port), r.Colo}); err != nil {
+			return nil, err
+		}
+	}
+	w.Flush()
+	return out.Bytes(), w.Error()
+}
+
 func writeCSV(dst io.Writer, rs []Result) error {
 	w := csv.NewWriter(dst)
 	if err := w.Write(csvHeader); err != nil {

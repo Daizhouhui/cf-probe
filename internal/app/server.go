@@ -472,14 +472,14 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusNotFound, "没有符合下载速度条件的结果")
 			return
 		}
-		data, err := encodeCSV(rs)
+		data, err := encodeNodeCSV(rs)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-		w.Header().Set("Content-Disposition", `attachment; filename="result-qualified.csv"`)
-		_, _ = w.Write(append([]byte{0xef, 0xbb, 0xbf}, data...))
+		w.Header().Set("Content-Disposition", `attachment; filename="result.csv"`)
+		_, _ = w.Write(data)
 		return
 	}
 

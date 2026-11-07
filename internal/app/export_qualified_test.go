@@ -49,8 +49,8 @@ func TestLegacyCSVDoesNotQualifyUnmeasuredRows(t *testing.T) {
 func TestDownloadCSVContainsOnlySpeedQualifiedResults(t *testing.T) {
 	s := NewServer()
 	s.runner.results = []Result{
-		{IP: "1.1.1.1", Port: 443, Speed: 1, SpeedTested: true, SpeedQualified: false},
-		{IP: "1.1.1.2", Port: 443, Speed: 5, SpeedTested: true, SpeedQualified: true},
+		{IP: "1.1.1.1", Port: 443, Speed: 1, SpeedTested: true, SpeedQualified: false, Colo: "SIN"},
+		{IP: "1.1.1.2", Port: 2053, Speed: 5, SpeedTested: true, SpeedQualified: true, Colo: "HKG"},
 		{IP: "1.1.1.3", Port: 443, Speed: 0, SpeedTested: false, SpeedQualified: false},
 	}
 	req := httptest.NewRequest("GET", "/api/download?kind=result", nil)
@@ -59,12 +59,15 @@ func TestDownloadCSVContainsOnlySpeedQualifiedResults(t *testing.T) {
 	if res.Code != 200 {
 		t.Fatalf("want status 200, got %d: %s", res.Code, res.Body.String())
 	}
-	csv := strings.TrimPrefix(res.Body.String(), "\ufeff")
-	got, err := parseCSVText(csv)
-	if err != nil {
-		t.Fatal(err)
+	// \u4e0b\u8f7d\u6587\u4ef6\u662f\u7ed9\u5916\u90e8\u5ba2\u6237\u7aef\u7528\u7684\u7cbe\u7b80\u683c\u5f0f
+	lines := strings.Split(strings.TrimSpace(res.Body.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 lines, got %d: %q", len(lines), res.Body.String())
 	}
-	if len(got) != 1 || got[0].IP != "1.1.1.2" || !got[0].SpeedQualified {
-		t.Fatalf("download should contain only speed-qualified nodes, got %+v", got)
+	if got := strings.TrimSpace(lines[0]); got != "ip,port,region" {
+		t.Errorf("header = %q, want ip,port,region", got)
+	}
+	if got := strings.TrimSpace(lines[1]); got != "1.1.1.2,2053,HKG" {
+		t.Errorf("row = %q, want the speed-qualified node only", got)
 	}
 }
