@@ -21,13 +21,13 @@
 
 **Linux/macOS:**
 ```bash
-tar -xzf yx_linux_amd64.tar.gz
-chmod +x yx_linux_amd64
-./yx_linux_amd64
+tar -xzf CfProbe-Linux-Amd64.tar.gz
+chmod +x CfProbe-Linux-Amd64
+./CfProbe-Linux-Amd64
 ```
 
 **Windows:**
-解压后直接运行 yx_windows_amd64.exe
+解压后直接运行 `CfProbe-Windows-Amd64.exe`
 
 **Docker:**
 ```bash
@@ -225,7 +225,7 @@ keytool -genkeypair -v -keystore "$HOME\cf-probe-release.jks" -storetype JKS -al
 **Q: Linux 权限不足？**
 
 ```bash
-chmod +x yx_linux_amd64
+chmod +x CfProbe-Linux-Amd64
 ```
 
 **Q: 测速结果不理想？**

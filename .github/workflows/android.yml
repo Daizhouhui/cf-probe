@@ -78,21 +78,22 @@ jobs:
       - name: 生成校验和
         run: |
           cd android/app/build/outputs/apk/release
-          sha256sum app-release.apk | tee checksums.txt
+          cp app-release.apk CfProbe-Android.apk
+          sha256sum CfProbe-Android.apk | tee Checksums.txt
 
       - name: 发布 Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/apk/release/checksums.txt
+            android/app/build/outputs/apk/release/CfProbe-Android.apk
+            android/app/build/outputs/apk/release/Checksums.txt
           generate_release_notes: true
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: yx-android-apk
+          name: CfProbe-Android-Apk
           path: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/apk/release/checksums.txt
+            android/app/build/outputs/apk/release/CfProbe-Android.apk
+            android/app/build/outputs/apk/release/Checksums.txt
