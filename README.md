@@ -11,7 +11,7 @@
 - CSV 下载、反代列表导出及 cfnew/GitHub 上报仅包含下载速度达标的节点
 - Web 结果计数显示下载速度达标节点数
 - 内置 Cron 定时任务支持
-- 提供 Android APK 和 Docker 镜像
+- 提供 Android APK 和 Docker 镜像(docker已弃用)
 
 ## 快速开始
 
