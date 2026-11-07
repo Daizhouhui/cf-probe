@@ -4,11 +4,14 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.ContentValues
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.JavascriptInterface
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -21,6 +24,7 @@ import java.net.URL
 class MainActivity : Activity() {
 
     private lateinit var webView: WebView
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -31,9 +35,41 @@ class MainActivity : Activity() {
             javaScriptEnabled = true
             domStorageEnabled = true
             allowFileAccess = false
-            allowContentAccess = false
+            // 文件选择器返回的是 content:// URI，必须允许读取，
+            // 否则选完文件后 JS 的 FileReader 读不到内容。
+            allowContentAccess = true
         }
         webView.addJavascriptInterface(DownloadBridge(), "AndroidBridge")
+        // 没有 WebChromeClient 时，网页里的 <input type="file"> 点不动，
+        // 这里接管系统文件选择器，把选中的文件回传给网页。
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onShowFileChooser(
+                view: WebView?,
+                callback: ValueCallback<Array<Uri>>?,
+                params: FileChooserParams?
+            ): Boolean {
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = callback
+                val intent = try {
+                    params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = "*/*"
+                    }
+                } catch (_: Exception) {
+                    callback?.onReceiveValue(null)
+                    fileChooserCallback = null
+                    return false
+                }
+                return try {
+                    this@MainActivity.startActivityForResult(intent, FILE_CHOOSER_REQUEST)
+                    true
+                } catch (_: Exception) {
+                    callback?.onReceiveValue(null)
+                    fileChooserCallback = null
+                    false
+                }
+            }
+        }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val host = request.url.host ?: return false
@@ -169,6 +205,22 @@ class MainActivity : Activity() {
         return dir.absolutePath
     }
 
+    // 系统文件选择器返回后，把选中的文件交给 WebView
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (requestCode == FILE_CHOOSER_REQUEST) {
+            val callback = fileChooserCallback
+            fileChooserCallback = null
+            callback?.onReceiveValue(
+                if (resultCode == RESULT_OK && data != null)
+                    WebChromeClient.FileChooserParams.parseResult(resultCode, data)
+                else null
+            )
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (webView.canGoBack()) webView.goBack() else super.onBackPressed()
@@ -176,7 +228,13 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         // 退出时关掉本地引擎；进程被系统回收时也会随进程一起结束
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
         Androidlib.stop()
         super.onDestroy()
+    }
+
+    private companion object {
+        const val FILE_CHOOSER_REQUEST = 1001
     }
 }
