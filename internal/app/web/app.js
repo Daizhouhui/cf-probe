@@ -13,7 +13,7 @@ const state = {
   system: {},      // 运行环境信息（是否支持 crontab 等）
   pool: 1000,      // 候选 IP 数量，0 表示不限
   httping: false,  // 用真实 HTTP 请求测延迟
-  noDL: false,     // 跳过下载测速
+  dlMode: 'both',  // both: 都测 / delay: 仅测延迟 / download: 仅测下载
   speedFilter: false, // 是否只显示符合速度条件的结果
 };
 
@@ -83,6 +83,33 @@ function renderColoList(q) {
   list.classList.add('show');
 }
 
+// 允许一次输入多个机场码，用逗号/空格分隔，回车后一起加进来。
+// 也接受直接输入城市名，能唯一对上机场码就补成代码。
+function addTypedColos(text) {
+  const tokens = String(text || '').split(/[\s,，、]+/).filter(Boolean);
+  if (!tokens.length) return;
+  let added = 0;
+  tokens.forEach(tok => {
+    const q = tok.trim();
+    if (!q) return;
+    let hit = state.colos.find(c => c.code.toLowerCase() === q.toLowerCase());
+    if (!hit) {
+      hit = state.colos.find(c =>
+        c.name === q || c.name.includes(q) ||
+        c.country === q || c.region === q);
+    }
+    if (!hit) return;
+    if (!state.picked.includes(hit.code)) {
+      state.picked.push(hit.code);
+      added++;
+    }
+  });
+  $('#coloSearch').value = '';
+  $('#coloList').classList.remove('show');
+  renderChips();
+  if (!added) toast('没有匹配的机场码', 'err');
+}
+
 // ── 结果表 ────────────────────────────────────────
 function fmtSpeed(v, tested) {
   if (!tested) {
@@ -135,7 +162,9 @@ function visibleRows() {
     (speedMin === null || r.speed >= speedMin) &&
     (speedMax === null || r.speed <= speedMax) &&
     (lossMax === null || r.loss_rate * 100 <= lossMax) &&
-    (!colo || (r.colo || '').toLowerCase().includes(colo) ||
+    // 面板里的条件同时匹配 IP、机房码和城市名
+    (!colo || (r.ip || '').toLowerCase().includes(colo) ||
+      (r.colo || '').toLowerCase().includes(colo) ||
       (r.colo_name || '').toLowerCase().includes(colo))
   );
   if (q) {
@@ -249,7 +278,6 @@ function setRunning(on, keepProgress) {
   state.running = on;
   if (!on) state.stopping = false;
   $('#btnStart').classList.toggle('hidden', on);
-  $('#btnSpeedOnly').classList.toggle('hidden', on);
   $('#btnStop').classList.toggle('hidden', !on);
   $('#actionProgress').classList.toggle('hidden', !state.stopping);
   $('#actionProgress').setAttribute('aria-hidden', String(!state.stopping));
@@ -279,7 +307,27 @@ async function stop() {
     button.disabled = false;
     button.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><rect x="6" y="6" width="12" height="12"/></svg>停止';
     toast('停止请求失败: ' + e.message, 'err');
+    return;
   }
+  // 事件流万一丢了，直接问后端有没有真的停下，
+  // 别让按钮永远卡在「正在停止…」。
+  for (let i = 0; i < 20 && state.running; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    try {
+      const st = await api('/api/status');
+      if (!st.running) {
+        state.results = await api('/api/results');
+        renderTable();
+        setRunning(false);
+        $('#statusText').textContent = '已停止';
+        return;
+      }
+    } catch (_) {}
+  }
+  if (!state.running) return;
+  button.disabled = false;
+  button.innerHTML = '<svg viewBox="0 0 24 24" class="ico"><rect x="6" y="6" width="12" height="12"/></svg>停止';
+  toast('引擎仍在收尾，可以稍后再点一次停止', 'err');
 }
 
 // 有确切进度就画百分比，没有才退回滚动动画
@@ -298,6 +346,13 @@ function setProgress(cur, total) {
 
 function connectEvents() {
   const es = new EventSource('/api/events');
+  // 断线重连后以服务端状态为准，避免界面还停在「正在运行」
+  es.onopen = async () => {
+    try {
+      const st = await api('/api/status');
+      if (!st.running && state.running) setRunning(false);
+    } catch (_) {}
+  };
   es.onmessage = ev => {
     let e;
     try { e = JSON.parse(ev.data); } catch (_) { return; }
@@ -313,8 +368,12 @@ function connectEvents() {
     }
     if (e.type === 'progress') setProgress(e.current, e.total);
     if (e.type === 'result' && e.result) {
-      // 下载测速逐条回来，测一个显示一个，不用等整批跑完
-      state.results.push(e.result);
+      // 下载测速逐条回来，测一个显示一个，不用等整批跑完。
+      // 刷新页面时事件回放和 /api/results 会给同一批数据，按 IP:端口 去重。
+      const r = e.result;
+      if (!state.results.some(x => x.ip === r.ip && x.port === r.port)) {
+        state.results.push(r);
+      }
       renderTable();
       setRunning(true, true);
       return;
@@ -345,7 +404,7 @@ function connectEvents() {
 }
 
 // ── 启动测速 ──────────────────────────────────────
-async function start(skipDelay) {
+async function start() {
   const opts = {
     colo: state.picked.join(','),
     ipv6: $('#segIPv button.on').dataset.v === '6',
@@ -360,8 +419,8 @@ async function start(skipDelay) {
     // 只有点了「全部」这一档才穷举网段内每个 IP
     test_all: $('#segPool button[data-pool="0"]').classList.contains('on'),
     httping: state.httping,
-    disable_dl: skipDelay ? false : state.noDL,
-    skip_delay: !!skipDelay,
+    disable_dl: state.dlMode === 'delay',
+    skip_delay: state.dlMode === 'download',
     dl_timeout: +$('#inDLTimeout').value || 10,
     max_runtime: +$('#inMaxRun').value || 0,
   };
@@ -406,7 +465,7 @@ async function loadConfig(uploadOnly) {
     if (c.dl_timeout) $('#inDLTimeout').value = c.dl_timeout;
     if (c.max_runtime != null) $('#inMaxRun').value = c.max_runtime;
     setPing(!!c.httping);
-    setDL(!!c.disable_dl);
+    setDL(c.disable_dl ? 'delay' : 'both');
     if (c.sample_size != null) {
       const custom = !POOL_PRESETS.includes(c.sample_size);
       if (custom) $('#inPool').value = c.sample_size;
@@ -485,7 +544,8 @@ async function runProxy() {
         threads: +$('#inThread').value || 200,
         test_url: $('#inURL').value.trim(),
         httping: state.httping,
-        disable_dl: state.noDL,
+        disable_dl: state.dlMode === 'delay',
+        skip_delay: state.dlMode === 'download',
       }),
     });
     setRunning(true);
@@ -552,13 +612,16 @@ function setPing(on) {
   $('#segPing button[data-ping="tcp"]').disabled = forced;
 }
 
-function setDL(off) {
-  state.noDL = off;
+function setDL(mode) {
+  state.dlMode = (mode === 'delay' || mode === 'download') ? mode : 'both';
   document.querySelectorAll('#segDL button').forEach(b =>
-    b.classList.toggle('on', (b.dataset.dl === 'off') === off));
-  $('#dlNote').textContent = off
-    ? '只排延迟，不下载，快很多但看不出带宽'
-    : '测完延迟再下载大文件，测出真实速度';
+    b.classList.toggle('on', b.dataset.dl === state.dlMode));
+  $('#dlNote').textContent =
+    state.dlMode === 'delay'
+      ? '只排延迟，不下载，快很多但看不出带宽'
+      : state.dlMode === 'download'
+        ? '跳过延迟测速，直接对候选 IP 测下载速度'
+        : '测完延迟再下载大文件，测出真实速度';
 }
 
 // ── 候选 IP 数量 ──────────────────────────────────
@@ -807,7 +870,7 @@ function buildCronArgs() {
   }
 
   if (state.httping) parts.push('-http');
-  if (state.noDL) parts.push('-nodl');
+  if (state.dlMode === 'delay') parts.push('-nodl');
 
   // 超时设置：非默认值才带上
   const dt = +$('#inDLTimeout').value;
@@ -888,6 +951,11 @@ async function removeCron() {
 
   $('#coloSearch').addEventListener('input', e => renderColoList(e.target.value));
   $('#coloSearch').addEventListener('focus', e => renderColoList(e.target.value));
+  $('#coloSearch').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    addTypedColos($('#coloSearch').value);
+  });
   document.addEventListener('click', e => {
     if (!e.target.closest('.colo-box')) $('#coloList').classList.remove('show');
   });
@@ -916,15 +984,14 @@ async function removeCron() {
     b.onclick = () => { if (!b.disabled) setPing(b.dataset.ping === 'http'); };
   });
   document.querySelectorAll('#segDL button').forEach(b => {
-    b.onclick = () => setDL(b.dataset.dl === 'off');
+    b.onclick = () => setDL(b.dataset.dl);
   });
   $('#inPool').addEventListener('input', e => {
     const v = +e.target.value;
     setPool(v > 0 ? v : 0, { custom: true });
   });
   $('#inIPText').addEventListener('input', syncPoolNote);
-  $('#btnStart').onclick = () => start(false);
-  $('#btnSpeedOnly').onclick = () => start(true);
+  $('#btnStart').onclick = () => start();
   $('#btnStop').onclick = stop;
   $('#filterText').addEventListener('input', renderTable);
   $('#btnResultFilter').onclick = () => {

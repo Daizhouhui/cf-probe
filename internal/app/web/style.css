@@ -204,16 +204,16 @@ em.note{font-style:normal;font-size:11.5px;color:var(--faint);line-height:1.45;
 @media (max-width:820px){
   .layout{grid-template-columns:1fr;grid-template-rows:auto 1fr}
   .panel{border-right:0;border-bottom:1px solid var(--line);max-height:48vh}
-  /* 手机上按钮按两列排，不再让长短不一的一串按钮乱换行 */
-  .toolbar{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 12px}
-  .toolbar input{grid-column:1/-1;max-width:none;width:100%}
+  /* 手机上 6 个工具按钮排成 3 列 × 2 行 */
+  .toolbar{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 12px}
   .toolbar .spacer{display:none}
-  .toolbar .btn{width:100%}
-  #btnUploadGH{grid-column:1/-1}
-  .result-filters{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:stretch}
-  .filter-field{flex:none}
-  .filter-range-field{grid-column:1/-1}
-  .filter-reset,#btnDownloadFiltered{width:100%}
+  #filterText{display:none}
+  .toolbar .btn{width:100%;padding-left:4px;padding-right:4px;font-size:12px;gap:4px}
+  /* 第一行四个输入框，第二行两个输入框 + 两个按钮 */
+  .result-filters{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;align-items:stretch}
+  .filter-field{flex:none;font-size:10.5px}
+  .filter-range-field{grid-column:span 2}
+  .filter-reset,#btnDownloadFiltered{grid-column:span 1;width:100%;padding-left:4px;padding-right:4px}
   .actions{margin-top:10px}
 }
 @media (min-width:821px) and (max-width:1100px){

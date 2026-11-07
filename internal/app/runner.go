@@ -42,10 +42,15 @@ func NewRunner() *Runner {
 func (r *Runner) Subscribe() (<-chan Event, func()) {
 	ch := make(chan Event, 64)
 	r.mu.Lock()
-	for _, e := range r.history {
-		select {
-		case ch <- e:
-		default:
+	// 只在任务进行中回放历史。任务结束后再回放旧的 progress 事件，
+	// 会让刚刷新的页面误以为测速还在跑（停止按钮一直转圈）。
+	// 已结束的结果由 /api/results 提供，界面不必依赖事件回放。
+	if r.running {
+		for _, e := range r.history {
+			select {
+			case ch <- e:
+			default:
+			}
 		}
 	}
 	r.subs[ch] = struct{}{}
