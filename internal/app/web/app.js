@@ -217,19 +217,7 @@ function downloadFilteredCSV() {
       Number(r.delay).toFixed(2), Number(r.speed).toFixed(2), r.colo || 'N/A', r.port,
     ]),
   ].map(row => row.map(csvCell).join(',')).join('\r\n');
-  if (window.AndroidBridge && typeof window.AndroidBridge.saveTextFile === 'function') {
-    window.AndroidBridge.saveTextFile('result-filtered.csv', '\ufeff' + data);
-    return;
-  }
-  const blob = new Blob(['\ufeff', data], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'result-filtered.csv';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  saveText('result-filtered.csv', '\ufeff' + data);
 }
 
 function applyTheme(theme) {
@@ -340,7 +328,11 @@ function connectEvents() {
 
       // 计算符合速度条件的数量
       const speedQualifiedCount = state.results.filter(r => r.speed_qualified).length;
-      toast(`测速完成，结果 ${speedQualifiedCount}`, 'ok');
+      if (e.cancelled) {
+        toast(`已停止，保留 ${speedQualifiedCount} 个符合速度条件的结果`, 'ok');
+      } else {
+        toast(`测速完成，结果 ${speedQualifiedCount}`, 'ok');
+      }
     } else if (e.type === 'error') {
       setRunning(false);
       $('#statusDot').className = 'dot err';
@@ -408,7 +400,7 @@ async function loadConfig(uploadOnly) {
     if (c.count) $('#inCount').value = c.count;
     if (c.speed_limit != null) $('#inSpeed').value = c.speed_limit;
     if (c.delay_limit) $('#inDelay').value = c.delay_limit;
-    if (c.threads) { $('#inThread').value = c.threads; $('#threadVal').textContent = c.threads; }
+    if (c.threads) setThread(c.threads, { custom: !THREAD_PRESETS.includes(+c.threads) });
     if (c.port) $('#inPort').value = c.port;
     if (c.test_url) $('#inURL').value = c.test_url;
     if (c.dl_timeout) $('#inDLTimeout').value = c.dl_timeout;
@@ -608,14 +600,71 @@ function syncPoolNote() {
   setPool(state.pool, { custom: !$('#inPool').classList.contains('hidden') });
 }
 
+// ── 延迟测速线程数 ────────────────────────────────
+const THREAD_PRESETS = [50, 100, 200, 500];
+
+// 高亮某一档。isCustom 为真时高亮「自定义」并展开输入框
+function markThread(n, isCustom) {
+  document.querySelectorAll('#segThread button').forEach(b => {
+    const on = b.dataset.thread === 'custom' ? isCustom
+      : (!isCustom && +b.dataset.thread === n);
+    b.classList.toggle('on', on);
+  });
+  $('#inThread').classList.toggle('hidden', !isCustom);
+}
+
+function setThread(n, opt) {
+  opt = opt || {};
+  $('#inThread').value = n;
+  markThread(n, !!opt.custom);
+}
+
+// 切到自定义档：沿用输入框已有的值，没有就拿默认值打底
+function pickCustomThread() {
+  const box = $('#inThread');
+  if (!box.value) box.value = 200;
+  box.classList.remove('hidden');
+  markThread(+box.value, true);
+  box.focus();
+}
+
 // ── 下载结果文件 ──────────────────────────────────
-function download(kind) {
+// Android WebView 不稳的地方在于 <a download>：不一定触发下载监听，
+// 所以统一先 fetch 内容，再交给 JS 桥保存；桌面浏览器走 Blob 下载。
+// fetch 还能把服务端的错误提示（比如没有符合条件的结果）显示出来。
+function saveText(name, content) {
+  const bridge = window.AndroidBridge;
+  if (bridge && typeof bridge.saveTextFile === 'function') {
+    bridge.saveTextFile(name, content);
+    return;
+  }
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = '/api/download?kind=' + encodeURIComponent(kind);
-  a.download = '';
+  a.href = url;
+  a.download = name;
   document.body.appendChild(a);
   a.click();
   a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function downloadCSV(url, name) {
+  let data;
+  try {
+    const r = await fetch(url);
+    data = await r.text();
+    if (!r.ok) {
+      let msg = '';
+      try { msg = JSON.parse(data).error || ''; } catch (_) {}
+      throw new Error(msg || ('下载失败 (HTTP ' + r.status + ')'));
+    }
+  } catch (e) {
+    toast(e.message === 'Failed to fetch' ? '下载失败，请重试' : e.message, 'err');
+    return;
+  }
+  // fetch 的 text() 会吃掉 BOM，保存时补回来，Excel 打开才不乱码
+  saveText(name, '\ufeff' + data.replace(/^\ufeff/, ''));
 }
 
 // ── 自定义 IP 段文件导入 ──────────────────────────
@@ -850,7 +899,13 @@ async function removeCron() {
     };
   });
 
-  $('#inThread').addEventListener('input', e => { $('#threadVal').textContent = e.target.value; });
+  document.querySelectorAll('#segThread button').forEach(b => {
+    b.onclick = () => {
+      if (b.dataset.thread === 'custom') pickCustomThread();
+      else setThread(+b.dataset.thread);
+    };
+  });
+  $('#inThread').addEventListener('input', e => markThread(+e.target.value, true));
   document.querySelectorAll('#segPool button').forEach(b => {
     b.onclick = () => {
       if (b.dataset.pool === 'custom') pickCustomPool();
@@ -936,7 +991,7 @@ async function removeCron() {
   });
   $('#btnUploadAPI').onclick = uploadAPI;
   $('#btnUploadGH').onclick = uploadGitHub;
-  $('#btnDownload').onclick = () => download('result');
+  $('#btnDownload').onclick = () => downloadCSV('/api/download?kind=result', 'result-qualified.csv');
   $('#btnDownloadFiltered').onclick = downloadFilteredCSV;
   $('#btnTheme').onclick = toggleTheme;
 

@@ -96,8 +96,15 @@
     </div>
 
     <div class="field">
-      <label>延迟测速线程 <span class="hint" id="threadVal">200</span></label>
-      <input type="range" id="inThread" min="10" max="1000" step="10" value="200">
+      <label>延迟测速线程</label>
+      <div class="seg" id="segThread">
+        <button data-thread="50">50</button>
+        <button data-thread="100">100</button>
+        <button class="on" data-thread="200">200</button>
+        <button data-thread="500">500</button>
+        <button data-thread="custom">自定义</button>
+      </div>
+      <input type="number" id="inThread" class="hidden" min="10" max="1000" step="10" value="200">
     </div>
 
     <div class="more-open">
@@ -134,7 +141,7 @@
 
     <div class="actions">
       <div class="action-progress hidden" id="actionProgress" role="progressbar" aria-label="测速正在进行" aria-hidden="true"><i></i></div>
-      <button class="btn primary" id="btnStart">
+      <button class="btn go" id="btnStart">
         <svg viewBox="0 0 24 24" class="ico"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         开始测速
       </button>
@@ -211,7 +218,7 @@
         <input type="text" id="filterColo" placeholder="如 香港、HKG" autocomplete="off">
       </label>
       <button class="btn ghost filter-reset" id="btnFilterReset" type="button">清除筛选</button>
-      <button class="btn ghost" id="btnDownloadFiltered" type="button" title="下载当前筛选结果 CSV">下载</button>
+      <button class="btn ghost" id="btnDownloadFiltered" type="button" title="下载当前筛选结果 CSV">筛选下载</button>
     </div>
 
     <div class="table-wrap">

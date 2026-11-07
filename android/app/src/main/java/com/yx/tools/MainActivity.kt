@@ -93,10 +93,13 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    // 界面里能导出的 CSV：完整结果与筛选结果
+    private val allowedDownloads = setOf("result-filtered.csv", "result-qualified.csv")
+
     private inner class DownloadBridge {
         @JavascriptInterface
         fun saveTextFile(name: String, content: String) {
-            if (name != "result-filtered.csv") {
+            if (name !in allowedDownloads) {
                 runOnUiThread {
                     Toast.makeText(this@MainActivity, "不支持的下载文件", Toast.LENGTH_SHORT).show()
                 }

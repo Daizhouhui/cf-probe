@@ -16,7 +16,8 @@ type Event struct {
 	Matched    int      `json:"matched"`
 	MatchTotal int      `json:"match_total,omitempty"`
 	Results    []Result `json:"results,omitempty"`
-	Result     *Result  `json:"result,omitempty"` // 下载测速逐条出结果时带上
+	Result     *Result  `json:"result,omitempty"`    // 下载测速逐条出结果时带上
+	Cancelled  bool     `json:"cancelled,omitempty"` // 用户主动停止，结果只包含已测出的部分
 	Finished   bool     `json:"finished"`
 	At         int64    `json:"at"`
 }
@@ -156,7 +157,18 @@ func (r *Runner) Start(o Options) bool {
 		})
 		if err != nil {
 			if ctx.Err() != nil {
-				r.broadcast(Event{Type: "error", Message: "已取消", Finished: true})
+				// 主动停止不是失败：把已经测出的部分结果留下来并落盘，
+				// 这样界面刷新、重开应用后还能继续下载这份结果
+				partial := r.Results()
+				if len(partial) > 0 {
+					if werr := WriteCSV(ResultFile, partial); werr != nil {
+						r.broadcast(Event{Type: "log", Message: "结果写入失败: " + werr.Error()})
+					}
+				}
+				r.broadcast(Event{
+					Type: "done", Stage: "done", Message: "已停止，已保留部分结果",
+					Results: partial, Cancelled: true, Finished: true,
+				})
 				return
 			}
 			r.broadcast(Event{Type: "error", Message: err.Error(), Finished: true})
