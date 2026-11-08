@@ -43,6 +43,126 @@
     });
   }
 
+  function fillDatalist(id, values) {
+    const list = $(id);
+    if (!list) return;
+    list.innerHTML = '';
+    const seen = {};
+    (values || []).forEach(v => {
+      if (!v || seen[v]) return;
+      seen[v] = true;
+      const opt = document.createElement('option');
+      opt.value = v;
+      list.appendChild(opt);
+    });
+  }
+
+  function valueOr(a, b) {
+    return (a != null && a !== '') ? a : (b || '');
+  }
+
+  function fillForm(st) {
+    const d = st.defaults || {};
+    const p = st.presets || {};
+    const meta = [st.config_repo, st.config_branch, st.config_path].filter(Boolean).join('/');
+    let line = meta || '配置已加载';
+    if (st.fetched_at) line += ' · 更新于 ' + new Date(st.fetched_at).toLocaleString();
+    if (st.warning) line += ' · ' + st.warning;
+    $('#vlessMeta').textContent = line;
+
+    fillDatalist('#vlessUUIDList', [d.uuid].concat(p.uuid || []));
+    fillDatalist('#vlessHostList', [d.host].concat(p.host || []));
+    fillDatalist('#vlessSNIList', [d.sni].concat(p.sni || []));
+    fillDatalist('#vlessPathList', [d.path].concat(p.path || []));
+    fillDatalist('#vlessFPList', [d.fp].concat(p.fp || []));
+
+    $('#vlessUUID').value = valueOr(st.uuid, d.uuid);
+    $('#vlessHost').value = valueOr(st.host, d.host);
+    $('#vlessSNI').value = valueOr(st.sni, d.sni);
+    $('#vlessPath').value = valueOr(st.path, d.path);
+    $('#vlessFP').value = valueOr(st.fp, d.fp);
+    $('#vlessECH').checked = !!st.ech;
+    $('#vlessUseConfig').checked = !!st.use_config_for_upload;
+    $('#vlessUploadRepo').value = st.upload_repo || '';
+    $('#vlessUploadToken').value = '';
+    $('#vlessUploadToken').placeholder = st.has_upload_token ? '留空沿用已保存的' : '必填';
+    $('#vlessFile').value = st.file || 'vlesssub';
+    $('#vlessCount').value = st.count ? st.count : '';
+    $('#vlessMerge').checked = st.merge !== false;
+
+    if (st.subscription_url) {
+      renderResult('上次订阅：', st.subscription_url);
+    } else {
+      renderResult('', '');
+    }
+    syncUseConfig();
+  }
+
+  function syncUseConfig() {
+    const on = $('#vlessUseConfig').checked;
+    $('#vlessUploadRepo').disabled = on;
+    $('#vlessUploadToken').disabled = on;
+  }
+
+  function renderResult(text, url) {
+    const box = $('#vlessResult');
+    box.textContent = '';
+    if (text) {
+      text.split('\n').forEach((line, i) => {
+        if (i) box.appendChild(document.createElement('br'));
+        box.appendChild(document.createTextNode(line));
+      });
+    }
+    if (url) {
+      if (box.childNodes.length) box.appendChild(document.createElement('br'));
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noreferrer';
+      a.textContent = url;
+      box.appendChild(a);
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'btn ghost sm';
+      copy.textContent = '复制';
+      copy.style.marginLeft = '6px';
+      copy.onclick = () => navigator.clipboard.writeText(url).then(
+        () => toast('已复制订阅链接', 'ok'),
+        () => toast('复制失败', 'err')
+      );
+      box.appendChild(copy);
+    }
+  }
+
+  async function open(st) {
+    if (!isLocalPage()) return;
+    try {
+      const s = st || await api('/api/vless/status');
+      if (!s || !s.enabled) {
+        toast('VLESS 功能未启用', 'err');
+        return;
+      }
+      fillForm(s);
+      $('#vlessMask').classList.remove('hidden');
+    } catch (e) {
+      toast(e.message, 'err');
+    }
+  }
+
+  async function refreshConfig() {
+    const btn = $('#vlessRefresh');
+    btn.disabled = true;
+    try {
+      const st = await api('/api/vless/config/refresh', { method: 'POST' });
+      fillForm(st);
+      toast('配置已刷新', 'ok');
+    } catch (e) {
+      toast(e.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   async function enable() {
     const token = $('#vlessEnableToken').value.trim();
     if (!token) {
@@ -63,21 +183,70 @@
       $('#vlessEnableToken').value = '';
       toast('VLESS 功能已启用', 'ok');
       await refreshStatus();
-      if (window.VlessUI && window.VlessUI.open) window.VlessUI.open(st);
+      await open(st);
     } catch (e) {
       toast(e.message, 'err');
     }
   }
 
-  window.VlessUI = { refreshStatus, open: () => {} };
+  async function upload() {
+    const body = {
+      count: $('#vlessCount').value.trim() === '' ? 0 : +$('#vlessCount').value,
+      file: $('#vlessFile').value.trim() || 'vlesssub',
+      merge: $('#vlessMerge').checked,
+      ech: $('#vlessECH').checked,
+      uuid: $('#vlessUUID').value.trim(),
+      host: $('#vlessHost').value.trim(),
+      sni: $('#vlessSNI').value.trim(),
+      path: $('#vlessPath').value.trim(),
+      fp: $('#vlessFP').value.trim(),
+      use_config_for_upload: $('#vlessUseConfig').checked,
+    };
+    if (!body.use_config_for_upload) {
+      body.upload_repo = $('#vlessUploadRepo').value.trim();
+      body.upload_token = $('#vlessUploadToken').value.trim();
+    }
+
+    const btn = $('#vlessRun');
+    btn.disabled = true;
+    renderResult('正在生成并上报…', '');
+    try {
+      const r = await api('/api/vless/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      let msg = `已上报 ${r.count} 个节点到 ${r.file}`;
+      if (r.merged) msg += '（已合并去重）';
+      if (r.warning) msg += '\n提示：' + r.warning;
+      if (r.subscription_error) msg += '\n订阅链接获取失败：' + r.subscription_error;
+      renderResult(msg, r.url || '');
+      $('#vlessUploadToken').value = '';
+      toast('已上报 ' + r.count + ' 个节点', 'ok');
+    } catch (e) {
+      renderResult('上报失败：' + e.message, '');
+      toast(e.message, 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
 
   async function init() {
     if (!isLocalPage()) return;
     bindDevGesture();
-    $('#btnVless').addEventListener('click', () => window.VlessUI.open());
+    $('#btnVless').addEventListener('click', () => open());
     $('#btnVlessEnable').addEventListener('click', enable);
+    $('#vlessClose').addEventListener('click', () => $('#vlessMask').classList.add('hidden'));
+    $('#vlessMask').addEventListener('click', e => {
+      if (e.target === $('#vlessMask')) $('#vlessMask').classList.add('hidden');
+    });
+    $('#vlessRefresh').addEventListener('click', refreshConfig);
+    $('#vlessRun').addEventListener('click', upload);
+    $('#vlessUseConfig').addEventListener('change', syncUseConfig);
     await refreshStatus();
   }
+
+  window.VlessUI = { refreshStatus, open };
 
   document.addEventListener('DOMContentLoaded', init);
 })();

@@ -359,6 +359,46 @@
   </div>
 </div>
 
+<!-- VLESS 订阅弹窗 -->
+<div class="mask hidden" id="vlessMask">
+  <div class="modal">
+    <h3>VLESS 订阅</h3>
+    <em class="note" id="vlessMeta"></em>
+
+    <div class="field">
+      <label>连接参数</label>
+      <div class="grid2">
+        <div class="field"><span class="hint">UUID</span><input type="text" id="vlessUUID" list="vlessUUIDList"><datalist id="vlessUUIDList"></datalist></div>
+        <div class="field"><span class="hint">Host</span><input type="text" id="vlessHost" list="vlessHostList"><datalist id="vlessHostList"></datalist></div>
+        <div class="field"><span class="hint">SNI</span><input type="text" id="vlessSNI" list="vlessSNIList"><datalist id="vlessSNIList"></datalist></div>
+        <div class="field"><span class="hint">Path</span><input type="text" id="vlessPath" list="vlessPathList"><datalist id="vlessPathList"></datalist></div>
+        <div class="field"><span class="hint">Fingerprint</span><input type="text" id="vlessFP" list="vlessFPList"><datalist id="vlessFPList"></datalist></div>
+      </div>
+      <label class="check"><input type="checkbox" id="vlessECH"> 启用 ECH（默认关闭）</label>
+    </div>
+
+    <hr>
+    <label class="check"><input type="checkbox" id="vlessUseConfig"> 上报沿用配置仓库和令牌</label>
+    <div class="grid2">
+      <div class="field"><label>上报仓库</label><input type="text" id="vlessUploadRepo" placeholder="owner/repo"></div>
+      <div class="field"><label>上报令牌</label><input type="password" id="vlessUploadToken" placeholder="留空沿用已保存的"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>文件名</label><input type="text" id="vlessFile" value="vlesssub"></div>
+      <div class="field"><label>上报数量</label><input type="number" id="vlessCount" min="0" placeholder="留空全部"></div>
+    </div>
+    <label class="check"><input type="checkbox" id="vlessMerge" checked> 合并到已有订阅（按 IP:端口 去重）</label>
+
+    <div class="modal-actions">
+      <button class="btn ghost" id="vlessRefresh" type="button">刷新配置</button>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="vlessClose" type="button">关闭</button>
+      <button class="btn primary" id="vlessRun" type="button">生成并上报</button>
+    </div>
+    <em class="note" id="vlessResult"></em>
+  </div>
+</div>
+
 <div class="toasts" id="toasts"></div>
 <script src="/app.js"></script>
 <script src="/vless.js"></script>
