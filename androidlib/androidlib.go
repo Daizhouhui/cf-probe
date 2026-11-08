@@ -87,5 +87,5 @@ func Stop() {
 
 // Version returns the version string.
 func Version() string {
-	return "1.0.20-android"
+	return "1.0.21-android"
 }
