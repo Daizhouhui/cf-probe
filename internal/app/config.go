@@ -30,6 +30,28 @@ type Config struct {
 	DLTimeout  int     `json:"dl_timeout"`
 	MaxRunTime int     `json:"max_runtime"`
 	Theme      string  `json:"theme"`
+
+	// VLESS 隐藏上报（默认关闭，只有输入 NodeWeb 令牌并校验成功后启用）
+	VlessEnabled            bool   `json:"vless_enabled"`
+	VlessConfigRepo         string `json:"vless_config_repo"`
+	VlessConfigBranch       string `json:"vless_config_branch"`
+	VlessConfigPath         string `json:"vless_config_path"`
+	VlessConfigToken        string `json:"vless_config_token"`
+	VlessConfigCache        string `json:"vless_config_cache"`
+	VlessConfigFetchedAt    int64  `json:"vless_config_fetched_at"`
+	VlessUseConfigForUpload bool   `json:"vless_use_config_for_upload"`
+	VlessUploadRepo         string `json:"vless_upload_repo"`
+	VlessUploadToken        string `json:"vless_upload_token"`
+	VlessFile               string `json:"vless_file"`
+	VlessCount              int    `json:"vless_count"`
+	VlessMerge              bool   `json:"vless_merge"`
+	VlessECH                bool   `json:"vless_ech"`
+	VlessUUID               string `json:"vless_uuid"`
+	VlessHost               string `json:"vless_host"`
+	VlessSNI                string `json:"vless_sni"`
+	VlessPath               string `json:"vless_path"`
+	VlessFP                 string `json:"vless_fp"`
+	VlessSubscriptionURL    string `json:"vless_subscription_url"`
 }
 
 const configName = "yx-config.json"
@@ -51,6 +73,12 @@ func DefaultConfig() *Config {
 		Port:       443,
 		SampleSize: 1000,
 		DLTimeout:  8,
+
+		VlessConfigRepo:   "Daizhouhui/NodeWeb",
+		VlessConfigBranch: "main",
+		VlessConfigPath:   "config.js",
+		VlessFile:         "vlesssub",
+		VlessMerge:        true,
 	}
 }
 
