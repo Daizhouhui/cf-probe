@@ -15,6 +15,9 @@
   </div>
   <div class="topbar-right">
     <span class="stat" id="statResult">结果 0</span>
+    <button class="btn ghost hidden" id="btnVless" type="button" title="VLESS 订阅" aria-label="VLESS 订阅">
+      <svg viewBox="0 0 24 24" class="ico"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 20 3m-3 3 3 3m-6 0 3 3"/></svg>
+    </button>
     <button class="btn ghost" id="btnTheme" type="button" title="切换浅色主题" aria-label="切换浅色主题">浅色</button>
     <button class="btn ghost" id="btnCron" title="定时任务">
       <svg viewBox="0 0 24 24" class="ico"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -243,6 +246,20 @@
 <div class="mask hidden" id="mask">
   <div class="modal">
     <h3>上报配置</h3>
+    <div id="vlessDev" class="hidden">
+      <hr>
+      <em class="note">开发者选项</em>
+      <div class="field">
+        <label>NodeWeb 令牌</label>
+        <input type="password" id="vlessEnableToken" placeholder="github_pat_… 或 ghp_…">
+      </div>
+      <div class="grid2">
+        <div class="field"><label>配置仓库</label><input type="text" id="vlessCfgRepo" value="Daizhouhui/NodeWeb"></div>
+        <div class="field"><label>分支</label><input type="text" id="vlessCfgBranch" value="main"></div>
+      </div>
+      <div class="field"><label>配置文件路径</label><input type="text" id="vlessCfgPath" value="config.js"></div>
+      <div class="modal-actions"><button class="btn primary" id="btnVlessEnable" type="button">启用</button></div>
+    </div>
     <div class="field">
       <label>Worker 域名</label>
       <input type="text" id="cfgDomain" placeholder="example.workers.dev">
@@ -344,5 +361,6 @@
 
 <div class="toasts" id="toasts"></div>
 <script src="/app.js"></script>
+<script src="/vless.js"></script>
 </body>
 </html>
