@@ -31,7 +31,7 @@ func TestQualifiedCSVPreservesSpeedStatus(t *testing.T) {
 }
 
 func TestLegacyCSVDoesNotQualifyUnmeasuredRows(t *testing.T) {
-	got, err := parseCSVText("IP 地址,下载速度(MB/s),端口\n1.1.1.1,0.00,443\n1.1.1.2,8.00,443\n")
+	got, err := parseCSVText("IP 地址,下载速度(MB/s),端口\n1.1.1.1,0.00,443\n1.1.1.2,12.00,443\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,10 +64,10 @@ func TestDownloadCSVContainsOnlySpeedQualifiedResults(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("want 2 lines, got %d: %q", len(lines), res.Body.String())
 	}
-	if got := strings.TrimSpace(lines[0]); got != "ip,port,region" {
-		t.Errorf("header = %q, want ip,port,region", got)
+	if got := strings.TrimSpace(lines[0]); got != "IP 地址,已发送,已接收,丢包率,平均延迟,下载速度(MB/s),地区码,端口" {
+		t.Errorf("header = %q, want the legacy 8-column format", got)
 	}
-	if got := strings.TrimSpace(lines[1]); got != "1.1.1.2,2053,HKG" {
+	if got := strings.TrimSpace(lines[1]); got != "1.1.1.2,0,0,0.00,0.00,5.00,HKG,2053" {
 		t.Errorf("row = %q, want the speed-qualified node only", got)
 	}
 }

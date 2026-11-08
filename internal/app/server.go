@@ -472,7 +472,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusNotFound, "没有符合下载速度条件的结果")
 			return
 		}
-		data, err := encodeNodeCSV(rs)
+		data, err := encodeDownloadCSV(rs)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err.Error())
 			return

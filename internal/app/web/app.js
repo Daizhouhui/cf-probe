@@ -248,8 +248,11 @@ function downloadFilteredCSV() {
     return;
   }
   const data = [
-    'ip,port,region',
-    ...rows.map(r => [r.ip, r.port, r.colo || ''].map(csvCell).join(',')),
+    'IP 地址,已发送,已接收,丢包率,平均延迟,下载速度(MB/s),地区码,端口',
+    ...rows.map(r => [
+      r.ip, r.sent, r.received, Number(r.loss_rate).toFixed(2),
+      Number(r.delay).toFixed(2), Number(r.speed).toFixed(2), r.colo || 'N/A', r.port,
+    ].map(csvCell).join(',')),
   ].join('\r\n');
   saveText(saveName('result-filtered'), data);
 }

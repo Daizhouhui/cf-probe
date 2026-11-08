@@ -34,12 +34,13 @@ func encodeCSV(rs []Result) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// encodeNodeCSV 导出给外部客户端用的精简列表：ip,port,region。
-// 完整字段仍保留在结果文件里，只有下载接口用这个格式。
-func encodeNodeCSV(rs []Result) ([]byte, error) {
+// encodeDownloadCSV 导出下载文件，沿用旧版的八列格式：
+// IP 地址,已发送,已接收,丢包率,平均延迟,下载速度(MB/s),地区码,端口。
+// 完整字段（含速度状态）仍保留在结果文件里。
+func encodeDownloadCSV(rs []Result) ([]byte, error) {
 	var out bytes.Buffer
 	w := csv.NewWriter(&out)
-	if err := w.Write([]string{"ip", "port", "region"}); err != nil {
+	if err := w.Write([]string{"IP 地址", "已发送", "已接收", "丢包率", "平均延迟", "下载速度(MB/s)", "地区码", "端口"}); err != nil {
 		return nil, err
 	}
 	for _, r := range rs {
@@ -47,7 +48,16 @@ func encodeNodeCSV(rs []Result) ([]byte, error) {
 		if port <= 0 {
 			port = 443
 		}
-		if err := w.Write([]string{r.IP, strconv.Itoa(port), r.Colo}); err != nil {
+		if err := w.Write([]string{
+			r.IP,
+			strconv.Itoa(r.Sent),
+			strconv.Itoa(r.Received),
+			strconv.FormatFloat(r.LossRate, 'f', 2, 64),
+			strconv.FormatFloat(r.Delay, 'f', 2, 64),
+			strconv.FormatFloat(r.Speed, 'f', 2, 64),
+			orNA(r.Colo),
+			strconv.Itoa(port),
+		}); err != nil {
 			return nil, err
 		}
 	}
