@@ -420,7 +420,14 @@ func (s *Server) handleVlessUpload(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "没有可写入的内容")
 		return
 	}
-	msg := fmt.Sprintf("更新 VLESS 订阅 (%d 个) %s", len(lines), time.Now().Format("2006-01-02 15:04"))
+	totalNodes := 0
+	for _, line := range finalLines {
+		if _, ok := vlessNodeKey(line); ok {
+			totalNodes++
+		}
+	}
+	msg := fmt.Sprintf("更新 VLESS 订阅 (%d 个)(总共%d节点) %s",
+		len(lines), totalNodes, time.Now().Format("2006-01-02 15:04"))
 	if err := githubPutFile(r.Context(), repo, branch, c.VlessFile, token, msg, []byte(content)); err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

@@ -123,6 +123,7 @@ type ghMock struct {
 	existing string
 	put      string
 	putPath  string
+	putMsg   string
 }
 
 func newGHMock(t *testing.T) (*ghMock, func()) {
@@ -146,7 +147,7 @@ func newGHMock(t *testing.T) (*ghMock, func()) {
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			raw, _ := base64.StdEncoding.DecodeString(body.Content)
-			m.put, m.putPath = string(raw), r.URL.Path
+			m.put, m.putPath, m.putMsg = string(raw), r.URL.Path, body.Message
 			w.WriteHeader(http.StatusOK)
 		}
 	}))
@@ -252,6 +253,9 @@ func TestVlessUploadMergesExisting(t *testing.T) {
 	}
 	if strings.Count(f.gh.put, "vless://") != 3 {
 		t.Fatalf("expected 3 unique nodes:\n%s", f.gh.put)
+	}
+	if !strings.Contains(f.gh.putMsg, "更新 VLESS 订阅 (2 个)(总共3节点)") {
+		t.Fatalf("commit message missing total: %q", f.gh.putMsg)
 	}
 }
 
