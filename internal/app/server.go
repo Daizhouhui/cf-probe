@@ -54,6 +54,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/vless/enable", localOnly(s.handleVlessEnable))
 	s.mux.HandleFunc("/api/vless/status", localOnly(s.handleVlessStatus))
 	s.mux.HandleFunc("/api/vless/config/refresh", localOnly(s.handleVlessConfigRefresh))
+	s.mux.HandleFunc("/api/vless/upload", localOnly(s.handleVlessUpload))
+	s.mux.HandleFunc("/api/vless/subscription", localOnly(s.handleVlessSubscription))
 }
 
 // ServeHTTP 实现 http.Handler
