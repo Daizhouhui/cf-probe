@@ -151,17 +151,19 @@ type GitHubTarget struct {
 }
 
 // normalizeGitHubToken 兼容经典令牌（ghp_）与 fine-grained 令牌（github_pat_）。
-// 同时允许用户把「Bearer xxx」/「token xxx」整段粘进来，去掉多余前缀。
+// 允许「Bearer xxx」/「token xxx」整段粘贴，并去掉引号、换行、空格等复制残留。
 func normalizeGitHubToken(tok string) string {
 	tok = strings.TrimSpace(tok)
+	tok = strings.Trim(tok, `"'`+"`")
 	lower := strings.ToLower(tok)
 	if strings.HasPrefix(lower, "bearer ") {
-		return strings.TrimSpace(tok[len("bearer "):])
+		tok = strings.TrimSpace(tok[len("bearer "):])
+	} else if strings.HasPrefix(lower, "token ") {
+		tok = strings.TrimSpace(tok[len("token "):])
 	}
-	if strings.HasPrefix(lower, "token ") {
-		return strings.TrimSpace(tok[len("token "):])
-	}
-	return tok
+	tok = strings.Trim(strings.TrimSpace(tok), `"'`+"`")
+	// 令牌内部不应有空白；复制时混入的换行/空格全部去掉
+	return strings.Join(strings.Fields(tok), "")
 }
 
 // githubAuthHint 把 401/403/404 翻译成更可操作的提示。
@@ -169,7 +171,7 @@ func normalizeGitHubToken(tok string) string {
 func githubAuthHint(status int, body []byte) error {
 	switch status {
 	case http.StatusUnauthorized:
-		return fmt.Errorf("GitHub 上传失败 HTTP 401：Token 无效或已过期，请重新生成")
+		return fmt.Errorf("GitHub 上传失败 HTTP 401：Token 无效、已过期或复制不完整。fine-grained 令牌（github_pat_…）通常约 93 位，经典令牌（ghp_…）为 40 位，请重新复制或生成")
 	case http.StatusForbidden, http.StatusNotFound:
 		return fmt.Errorf("GitHub 上传失败 HTTP %d：请确认 Token 对该仓库有 Contents: Read and write 权限；fine-grained Token（github_pat_…）还需在设置里勾选具体仓库。详情: %s",
 			status, truncate(string(body), 200))

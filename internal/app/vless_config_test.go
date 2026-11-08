@@ -16,9 +16,10 @@ const testConfigJS = `window.NODE_WEB_CONFIG = {
 };`
 
 func TestFetchNodeWebConfigRawFirst(t *testing.T) {
+	wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("x-access-token:tok"))
 	raw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer tok" || r.URL.Path != "/Owner/NodeWeb/main/config.js" {
-			t.Fatalf("raw request wrong: %s %s", r.Method, r.URL.Path)
+		if r.Header.Get("Authorization") != wantAuth || r.URL.Path != "/Owner/NodeWeb/main/config.js" {
+			t.Fatalf("raw request wrong: %s %s auth=%q", r.Method, r.URL.Path, r.Header.Get("Authorization"))
 		}
 		_, _ = w.Write([]byte(testConfigJS))
 	}))

@@ -39,6 +39,26 @@ type githubFileMeta struct {
 	Encoding string `json:"encoding"`
 }
 
+// verifyGitHubToken 先确认令牌本身有效，避免把「令牌复制错」误报成仓库权限问题。
+func verifyGitHubToken(ctx context.Context, token string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubAPIBase+"/user", nil)
+	if err != nil {
+		return err
+	}
+	githubSetHeaders(req, token)
+	req.Header.Set("User-Agent", browserUA)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("校验 GitHub Token 失败: %w", err)
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+	if resp.StatusCode == http.StatusUnauthorized {
+		return fmt.Errorf("GitHub Token 无效、已过期或复制不完整（fine-grained 通常约 93 位，经典令牌 40 位）")
+	}
+	return nil
+}
+
 // githubGetFile 读取文件内容与 sha；文件不存在返回 (nil, "", nil)。
 func githubGetFile(ctx context.Context, repo, branch, path, token string) ([]byte, string, error) {
 	u := githubContentsURL(repo, path)

@@ -43,18 +43,28 @@
     });
   }
 
-  function fillDatalist(id, values) {
-    const list = $(id);
-    if (!list) return;
-    list.innerHTML = '';
+  function fillSelect(id, values, current) {
+    const sel = $(id);
+    if (!sel) return;
+    sel.innerHTML = '';
     const seen = {};
     (values || []).forEach(v => {
       if (!v || seen[v]) return;
       seen[v] = true;
       const opt = document.createElement('option');
       opt.value = v;
-      list.appendChild(opt);
+      opt.textContent = v;
+      sel.appendChild(opt);
     });
+    if (current && !seen[current]) {
+      const opt = document.createElement('option');
+      opt.value = current;
+      opt.textContent = current;
+      sel.appendChild(opt);
+    }
+    if (sel.options.length) {
+      sel.value = current || sel.options[0].value;
+    }
   }
 
   function valueOr(a, b) {
@@ -70,17 +80,11 @@
     if (st.warning) line += ' · ' + st.warning;
     $('#vlessMeta').textContent = line;
 
-    fillDatalist('#vlessUUIDList', [d.uuid].concat(p.uuid || []));
-    fillDatalist('#vlessHostList', [d.host].concat(p.host || []));
-    fillDatalist('#vlessSNIList', [d.sni].concat(p.sni || []));
-    fillDatalist('#vlessPathList', [d.path].concat(p.path || []));
-    fillDatalist('#vlessFPList', [d.fp].concat(p.fp || []));
-
-    $('#vlessUUID').value = valueOr(st.uuid, d.uuid);
-    $('#vlessHost').value = valueOr(st.host, d.host);
-    $('#vlessSNI').value = valueOr(st.sni, d.sni);
-    $('#vlessPath').value = valueOr(st.path, d.path);
-    $('#vlessFP').value = valueOr(st.fp, d.fp);
+    fillSelect('#vlessUUID', [d.uuid].concat(p.uuid || []), valueOr(st.uuid, d.uuid));
+    fillSelect('#vlessHost', [d.host].concat(p.host || []), valueOr(st.host, d.host));
+    fillSelect('#vlessSNI', [d.sni].concat(p.sni || []), valueOr(st.sni, d.sni));
+    fillSelect('#vlessPath', [d.path].concat(p.path || []), valueOr(st.path, d.path));
+    fillSelect('#vlessFP', [d.fp].concat(p.fp || []), valueOr(st.fp, d.fp));
     $('#vlessECH').checked = !!st.ech;
     $('#vlessUseConfig').checked = !!st.use_config_for_upload;
     $('#vlessUploadRepo').value = st.upload_repo || '';
@@ -131,6 +135,16 @@
         () => toast('复制失败', 'err')
       );
       box.appendChild(copy);
+
+      // 安卓上尝试直接唤起 v2rayNG 导入订阅；桌面端不显示。
+      if (/Android/i.test(navigator.userAgent) || window.AndroidBridge) {
+        const imp = document.createElement('a');
+        imp.className = 'btn ghost sm';
+        imp.textContent = '导入 v2rayNG';
+        imp.style.marginLeft = '6px';
+        imp.href = 'v2rayng://install-sub?url=' + encodeURIComponent(url);
+        box.appendChild(imp);
+      }
     }
   }
 

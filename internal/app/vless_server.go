@@ -118,6 +118,10 @@ func (s *Server) handleVlessEnable(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "请填写 NodeWeb 令牌")
 		return
 	}
+	if err := verifyGitHubToken(r.Context(), token); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	c := LoadConfig()
 	repo := strings.TrimSpace(in.Repo)
 	if repo == "" {

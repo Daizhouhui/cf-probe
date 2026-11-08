@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -46,8 +47,11 @@ func fetchNodeWebConfig(ctx context.Context, repo, branch, path, token string) (
 	rawURL := strings.TrimSuffix(rawGithubBase, "/") + "/" + repo + "/" + branch + "/" + githubEscapePath(path)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err == nil {
-		req.Header.Set("Authorization", "Bearer "+normalizeGitHubToken(token))
+		// raw.githubusercontent.com 不接受 Bearer；按 actions/checkout 的方式用 Basic。
+		req.Header.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString(
+			[]byte("x-access-token:"+normalizeGitHubToken(token))))
 		req.Header.Set("Accept", "text/plain")
+		req.Header.Set("User-Agent", browserUA)
 		if resp, err := httpClient.Do(req); err == nil {
 			body, _ := io.ReadAll(io.LimitReader(resp.Body, maxConfigBytes+1))
 			_ = resp.Body.Close()

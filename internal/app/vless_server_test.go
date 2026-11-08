@@ -53,6 +53,14 @@ func TestVlessEnableStatusAndRefresh(t *testing.T) {
 	rawGithubBase = raw.URL
 	defer func() { rawGithubBase = oldRaw }()
 
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"login":"test"}`))
+	}))
+	defer api.Close()
+	oldAPI := githubAPIBase
+	githubAPIBase = api.URL
+	defer func() { githubAPIBase = oldAPI }()
+
 	withTestConfig(t, DefaultConfig())
 	s := NewServer()
 

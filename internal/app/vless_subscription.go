@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// browserUA 用来通过 Cloudflare 的默认 UA 拦截：Go 默认 UA 会收到 HTML 403。
+const browserUA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
 // requestSubscription 调用 Worker 的订阅链接接口，返回可用的订阅 URL。
 func requestSubscription(ctx context.Context, baseURL, apiPath, token, file string) (string, error) {
 	base := strings.TrimSpace(baseURL)
@@ -36,6 +39,8 @@ func requestSubscription(ctx context.Context, baseURL, apiPath, token, file stri
 	}
 	req.Header.Set("Authorization", "Bearer "+normalizeGitHubToken(token))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", browserUA)
 
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Do(req)

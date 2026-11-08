@@ -115,6 +115,9 @@ func TestNormalizeGitHubToken(t *testing.T) {
 		{"Bearer github_pat_token", "github_pat_token"},
 		{"bearer  ghp_abc", "ghp_abc"},
 		{"token github_pat_x", "github_pat_x"},
+		{" \"github_pat_quoted\" ", "github_pat_quoted"},
+		{"Bearer  \"ghp_quoted\"", "ghp_quoted"},
+		{"github_pat_line\nbreak", "github_pat_linebreak"},
 		{"", ""},
 	}
 	for _, c := range cases {

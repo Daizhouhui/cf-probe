@@ -72,3 +72,24 @@ func TestGithubPutFileSendsShaAndContent(t *testing.T) {
 		t.Fatalf("payload wrong: %+v", body)
 	}
 }
+
+func TestVerifyGitHubToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "Bearer good" {
+			_, _ = w.Write([]byte(`{"login":"u"}`))
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	old := githubAPIBase
+	githubAPIBase = srv.URL
+	defer func() { githubAPIBase = old }()
+
+	if err := verifyGitHubToken(context.Background(), "good"); err != nil {
+		t.Fatalf("valid token rejected: %v", err)
+	}
+	if err := verifyGitHubToken(context.Background(), "bad"); err == nil {
+		t.Fatal("invalid token must fail")
+	}
+}
