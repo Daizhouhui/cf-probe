@@ -119,3 +119,57 @@ func buildVlessLink(o vlessLinkOptions, r Result) (string, error) {
 	return fmt.Sprintf("vless://%s@%s:%d?%s#%s",
 		uuid, hostPart, port, strings.Join(params, "&"), url.QueryEscape(alias)), nil
 }
+
+// vlessNodeKey 从一行 VLESS 链接里取出 host:port，用作去重键。
+func vlessNodeKey(line string) (string, bool) {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#") {
+		return "", false
+	}
+	u, err := url.Parse(line)
+	if err != nil || u.Scheme != "vless" {
+		return "", false
+	}
+	host, port := u.Hostname(), u.Port()
+	if host == "" || port == "" {
+		return "", false
+	}
+	return strings.ToLower(host) + ":" + port, true
+}
+
+// mergeVlessLines 把新节点合并进远端已有内容：同 IP:端口 替换原行，新节点追加。
+// 非 VLESS 行原样保留；远端已有的重复项只保留第一行。
+func mergeVlessLines(existing, incoming []string) []string {
+	out := make([]string, 0, len(existing)+len(incoming))
+	index := make(map[string]int)
+	for _, line := range existing {
+		if key, ok := vlessNodeKey(line); ok {
+			if _, dup := index[key]; dup {
+				continue
+			}
+			index[key] = len(out)
+		}
+		out = append(out, line)
+	}
+	for _, line := range incoming {
+		key, ok := vlessNodeKey(line)
+		if !ok {
+			out = append(out, line)
+			continue
+		}
+		if idx, exists := index[key]; exists {
+			out[idx] = line
+			continue
+		}
+		index[key] = len(out)
+		out = append(out, line)
+	}
+	return out
+}
+
+func renderVlessFile(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
+}

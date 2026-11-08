@@ -74,3 +74,54 @@ func TestVlessOptionsFrom(t *testing.T) {
 		t.Fatalf("override merge wrong: %+v", o)
 	}
 }
+
+func TestMergeVlessLines(t *testing.T) {
+	existing := []string{
+		"vless://u@1.1.1.1:443?a=1#old",
+		"# comment",
+		"vless://u@2.2.2.2:443?a=1#keep",
+	}
+	incoming := []string{
+		"vless://u@2.2.2.2:443?a=2#new",
+		"vless://u@3.3.3.3:443?a=1#add",
+	}
+	got := mergeVlessLines(existing, incoming)
+	want := []string{
+		"vless://u@1.1.1.1:443?a=1#old",
+		"# comment",
+		"vless://u@2.2.2.2:443?a=2#new",
+		"vless://u@3.3.3.3:443?a=1#add",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("merge mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestMergeVlessLinesDedupesIncoming(t *testing.T) {
+	got := mergeVlessLines(nil, []string{
+		"vless://u@1.1.1.1:443#first",
+		"vless://u@1.1.1.1:443#second",
+	})
+	if len(got) != 1 || !strings.HasSuffix(got[0], "#second") {
+		t.Fatalf("incoming duplicates should collapse to last: %#v", got)
+	}
+}
+
+func TestVlessNodeKeyIPv6(t *testing.T) {
+	key, ok := vlessNodeKey("vless://u@[2001:db8::1]:443?type=ws#x")
+	if !ok || key != "2001:db8::1:443" {
+		t.Fatalf("key=%q ok=%v", key, ok)
+	}
+	if _, ok := vlessNodeKey("# comment"); ok {
+		t.Fatal("comment must not parse as a node")
+	}
+}
+
+func TestRenderVlessFile(t *testing.T) {
+	if got := renderVlessFile([]string{"a", "b"}); got != "a\nb\n" {
+		t.Fatalf("got %q", got)
+	}
+	if got := renderVlessFile(nil); got != "" {
+		t.Fatalf("empty should be empty, got %q", got)
+	}
+}
