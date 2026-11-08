@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -101,5 +102,34 @@ func TestNodeName(t *testing.T) {
 		if got := nodeName(c.in); got != c.want {
 			t.Fatalf("want %q, got %q", c.want, got)
 		}
+	}
+}
+
+// 经典令牌与 fine-grained 令牌都要原样保留；
+// 用户把「Bearer xxx」整段粘进来时要能剥掉前缀。
+func TestNormalizeGitHubToken(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"ghp_abc123", "ghp_abc123"},
+		{"github_pat_11ABCDEFG_xyz", "github_pat_11ABCDEFG_xyz"},
+		{"  github_pat_token  ", "github_pat_token"},
+		{"Bearer github_pat_token", "github_pat_token"},
+		{"bearer  ghp_abc", "ghp_abc"},
+		{"token github_pat_x", "github_pat_x"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := normalizeGitHubToken(c.in); got != c.want {
+			t.Errorf("normalize(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestGitHubAuthHintExplainsFineGrainedPermissions(t *testing.T) {
+	err := githubAuthHint(http.StatusForbidden, []byte(`{"message":"Resource not accessible by personal access token"}`))
+	if err == nil || !strings.Contains(err.Error(), "Contents: Read and write") {
+		t.Fatalf("403 应提示权限不足, got %v", err)
+	}
+	if err := githubAuthHint(http.StatusOK, nil); err != nil {
+		t.Fatalf("非错误状态不应返回错误, got %v", err)
 	}
 }

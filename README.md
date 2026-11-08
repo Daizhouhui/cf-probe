@@ -136,6 +136,8 @@ keytool -genkeypair -v -keystore "$HOME\cf-probe-release.jks" -storetype JKS -al
 ./yx test -n 10 -upload github -repo username/repo -token ghp_xxx -path results/ip_list.txt -clear
 ```
 
+Token 支持经典令牌（`ghp_…`）和 fine-grained 令牌（`github_pat_…`）。使用 fine-grained 令牌时，需要在 Token 设置里勾选目标仓库，并授予 **Contents: Read and write** 权限，否则 GitHub 会返回 403/404。
+
 单独执行上报:
 ```bash
 ./yx upload api -domain your.domain.com -uuid YOUR_UUID -limit 20 -clear

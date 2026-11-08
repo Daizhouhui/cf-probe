@@ -258,7 +258,8 @@
     </div>
     <div class="field">
       <label>GitHub Token <span class="hint" id="tokenHint"></span></label>
-      <input type="password" id="cfgToken" placeholder="留空则沿用已保存的">
+      <input type="password" id="cfgToken" placeholder="ghp_… 或 github_pat_…，留空沿用已保存的">
+      <em class="note">经典令牌（ghp_）和 fine-grained 令牌（github_pat_）都支持；fine-grained 需勾选目标仓库并授予 Contents: Read and write 权限</em>
     </div>
     <div class="field">
       <label>仓库内文件路径</label>

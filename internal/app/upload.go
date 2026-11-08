@@ -150,10 +150,38 @@ type GitHubTarget struct {
 	Path  string // 仓库内文件路径
 }
 
+// normalizeGitHubToken 兼容经典令牌（ghp_）与 fine-grained 令牌（github_pat_）。
+// 同时允许用户把「Bearer xxx」/「token xxx」整段粘进来，去掉多余前缀。
+func normalizeGitHubToken(tok string) string {
+	tok = strings.TrimSpace(tok)
+	lower := strings.ToLower(tok)
+	if strings.HasPrefix(lower, "bearer ") {
+		return strings.TrimSpace(tok[len("bearer "):])
+	}
+	if strings.HasPrefix(lower, "token ") {
+		return strings.TrimSpace(tok[len("token "):])
+	}
+	return tok
+}
+
+// githubAuthHint 把 401/403/404 翻译成更可操作的提示。
+// fine-grained 令牌最常见的问题是没勾选目标仓库或缺少 Contents 写权限。
+func githubAuthHint(status int, body []byte) error {
+	switch status {
+	case http.StatusUnauthorized:
+		return fmt.Errorf("GitHub 上传失败 HTTP 401：Token 无效或已过期，请重新生成")
+	case http.StatusForbidden, http.StatusNotFound:
+		return fmt.Errorf("GitHub 上传失败 HTTP %d：请确认 Token 对该仓库有 Contents: Read and write 权限；fine-grained Token（github_pat_…）还需在设置里勾选具体仓库。详情: %s",
+			status, truncate(string(body), 200))
+	}
+	return nil
+}
+
 // UploadToGitHub 把优选列表写入 GitHub 仓库，已存在则更新
 func UploadToGitHub(ctx context.Context, t GitHubTarget, rs []Result, limit int) (int, error) {
 	repo := strings.Trim(strings.TrimSpace(t.Repo), "/")
-	if repo == "" || strings.TrimSpace(t.Token) == "" {
+	token := normalizeGitHubToken(t.Token)
+	if repo == "" || token == "" {
 		return 0, fmt.Errorf("请先填写 GitHub 仓库和 Token")
 	}
 	if !strings.Contains(repo, "/") {
@@ -186,17 +214,25 @@ func UploadToGitHub(ctx context.Context, t GitHubTarget, rs []Result, limit int)
 	sha := ""
 	{
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, api, nil)
-		req.Header.Set("Authorization", "Bearer "+t.Token)
+		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 		if resp, err := httpClient.Do(req); err == nil {
 			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
+			switch resp.StatusCode {
+			case http.StatusOK:
 				var meta struct {
 					SHA string `json:"sha"`
 				}
 				b, _ := io.ReadAll(resp.Body)
 				_ = json.Unmarshal(b, &meta)
 				sha = meta.SHA
+			case http.StatusUnauthorized, http.StatusForbidden:
+				// 文件不存在时也会是 404，所以这里只对认证类错误提前返回
+				b, _ := io.ReadAll(resp.Body)
+				if hint := githubAuthHint(resp.StatusCode, b); hint != nil {
+					return 0, hint
+				}
 			}
 		}
 	}
@@ -213,8 +249,9 @@ func UploadToGitHub(ctx context.Context, t GitHubTarget, rs []Result, limit int)
 	if err != nil {
 		return 0, err
 	}
-	req.Header.Set("Authorization", "Bearer "+t.Token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -223,6 +260,9 @@ func UploadToGitHub(ctx context.Context, t GitHubTarget, rs []Result, limit int)
 	defer resp.Body.Close()
 	rb, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if hint := githubAuthHint(resp.StatusCode, rb); hint != nil {
+			return 0, hint
+		}
 		return 0, fmt.Errorf("GitHub 上传失败 HTTP %d: %s", resp.StatusCode, truncate(string(rb), 200))
 	}
 	return len(rs), nil
