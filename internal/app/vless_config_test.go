@@ -81,3 +81,28 @@ func TestFetchNodeWebConfigRejectsOversize(t *testing.T) {
 		t.Fatal("oversize config must fail")
 	}
 }
+
+func TestParseNodeWebConfig(t *testing.T) {
+	cfg, err := parseNodeWebConfig([]byte(testConfigJS))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.DefaultVless.UUID != "uuid-1" || cfg.DefaultVless.Host != "h.example" || cfg.DefaultVless.Path != "/?ed=2048" {
+		t.Fatalf("defaults wrong: %+v", cfg.DefaultVless)
+	}
+	if cfg.Github.Worker.Repo != "Owner/Sub" || cfg.Github.Worker.SubscriptionAPIPath != "/api/subscription-link" {
+		t.Fatalf("worker wrong: %+v", cfg.Github.Worker)
+	}
+	if len(cfg.VlessPresets.Host) != 1 || cfg.VlessPresets.Host[0] != "h.example" {
+		t.Fatalf("presets wrong: %+v", cfg.VlessPresets)
+	}
+}
+
+func TestParseNodeWebConfigRejectsBadScript(t *testing.T) {
+	if _, err := parseNodeWebConfig([]byte(`window.NODE_WEB_CONFIG = {`)); err == nil {
+		t.Fatal("invalid JS must fail")
+	}
+	if _, err := parseNodeWebConfig([]byte(`window.OTHER = {}`)); err == nil {
+		t.Fatal("missing NODE_WEB_CONFIG must fail")
+	}
+}
