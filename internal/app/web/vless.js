@@ -74,11 +74,11 @@
   function fillForm(st) {
     const d = st.defaults || {};
     const p = st.presets || {};
-    const meta = [st.config_repo, st.config_branch, st.config_path].filter(Boolean).join('/');
-    let line = meta || '配置已加载';
-    if (st.fetched_at) line += ' · 更新于 ' + new Date(st.fetched_at).toLocaleString();
-    if (st.warning) line += ' · ' + st.warning;
-    $('#vlessMeta').textContent = line;
+    $('#vlessRepo').textContent = [st.config_repo, st.config_branch, st.config_path].filter(Boolean).join('/');
+    const meta = [];
+    if (st.fetched_at) meta.push('更新于 ' + new Date(st.fetched_at).toLocaleString());
+    if (st.warning) meta.push(st.warning);
+    $('#vlessMeta').textContent = meta.join(' · ');
 
     fillSelect('#vlessUUID', [d.uuid].concat(p.uuid || []), valueOr(st.uuid, d.uuid));
     fillSelect('#vlessHost', [d.host].concat(p.host || []), valueOr(st.host, d.host));
@@ -86,10 +86,12 @@
     fillSelect('#vlessPath', [d.path].concat(p.path || []), valueOr(st.path, d.path));
     fillSelect('#vlessFP', [d.fp].concat(p.fp || []), valueOr(st.fp, d.fp));
     $('#vlessECH').checked = !!st.ech;
-    $('#vlessUseConfig').checked = !!st.use_config_for_upload;
+    $('#vlessUseConfigToken').checked = st.use_config_token !== false;
+    $('#vlessUseSubRepo').checked = !!st.use_subscription_repo;
+    if ($('#vlessUseConfigToken').checked) $('#vlessUseSubRepo').checked = false;
     $('#vlessUploadRepo').value = st.upload_repo || '';
     $('#vlessUploadToken').value = '';
-    $('#vlessUploadToken').placeholder = st.has_upload_token ? '留空沿用已保存的' : '必填';
+    $('#vlessUploadToken').dataset.saved = st.has_upload_token ? '1' : '';
     $('#vlessFile').value = st.file || 'vlesssub';
     $('#vlessCount').value = st.count ? st.count : '';
     $('#vlessMerge').checked = st.merge !== false;
@@ -99,13 +101,23 @@
     } else {
       renderResult('', '');
     }
-    syncUseConfig();
+    syncUseOptions();
   }
 
-  function syncUseConfig() {
-    const on = $('#vlessUseConfig').checked;
-    $('#vlessUploadRepo').disabled = on;
-    $('#vlessUploadToken').disabled = on;
+  // 两个「沿用」选项互斥；配置项令牌优先级最高。
+  function syncUseOptions() {
+    const useCfgToken = $('#vlessUseConfigToken').checked;
+    const useSubRepo = $('#vlessUseSubRepo').checked;
+    $('#vlessUploadRepo').disabled = useSubRepo;
+    const tokenInput = $('#vlessUploadToken');
+    tokenInput.disabled = useSubRepo || useCfgToken;
+    if (useCfgToken) {
+      tokenInput.placeholder = '使用配置项令牌';
+    } else if (useSubRepo) {
+      tokenInput.placeholder = '使用已保存的令牌';
+    } else {
+      tokenInput.placeholder = tokenInput.dataset.saved ? '留空沿用已保存的' : '必填';
+    }
   }
 
   function renderResult(text, url) {
@@ -178,11 +190,20 @@
   }
 
   async function enable() {
+    const btn = $('#btnVlessEnable');
+    const note = $('#vlessDevNote');
+    if (btn.disabled) return;
     const token = $('#vlessEnableToken').value.trim();
     if (!token) {
+      note.style.color = 'var(--bad)';
+      note.textContent = '请先填写 NodeWeb 令牌';
       toast('请填写 NodeWeb 令牌', 'err');
       return;
     }
+    btn.disabled = true;
+    btn.textContent = '启用中…';
+    note.style.color = '';
+    note.textContent = '正在校验令牌、拉取 config.js 并解析，请稍候…';
     try {
       const st = await api('/api/vless/enable', {
         method: 'POST',
@@ -195,11 +216,18 @@
         }),
       });
       $('#vlessEnableToken').value = '';
+      note.style.color = 'var(--ok)';
+      note.textContent = '已启用，config.js 已加载';
       toast('VLESS 功能已启用', 'ok');
       await refreshStatus();
       await open(st);
     } catch (e) {
+      note.style.color = 'var(--bad)';
+      note.textContent = e.message;
       toast(e.message, 'err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '启用';
     }
   }
 
@@ -214,10 +242,13 @@
       sni: $('#vlessSNI').value.trim(),
       path: $('#vlessPath').value.trim(),
       fp: $('#vlessFP').value.trim(),
-      use_config_for_upload: $('#vlessUseConfig').checked,
+      use_config_token: $('#vlessUseConfigToken').checked,
+      use_subscription_repo: $('#vlessUseSubRepo').checked,
     };
-    if (!body.use_config_for_upload) {
+    if (!$('#vlessUploadRepo').disabled) {
       body.upload_repo = $('#vlessUploadRepo').value.trim();
+    }
+    if (!$('#vlessUploadToken').disabled) {
       body.upload_token = $('#vlessUploadToken').value.trim();
     }
 
@@ -256,7 +287,14 @@
     });
     $('#vlessRefresh').addEventListener('click', refreshConfig);
     $('#vlessRun').addEventListener('click', upload);
-    $('#vlessUseConfig').addEventListener('change', syncUseConfig);
+    $('#vlessUseConfigToken').addEventListener('change', () => {
+      if ($('#vlessUseConfigToken').checked) $('#vlessUseSubRepo').checked = false;
+      syncUseOptions();
+    });
+    $('#vlessUseSubRepo').addEventListener('change', () => {
+      if ($('#vlessUseSubRepo').checked) $('#vlessUseConfigToken').checked = false;
+      syncUseOptions();
+    });
     await refreshStatus();
   }
 

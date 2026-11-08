@@ -35,28 +35,29 @@ func localOnly(next http.HandlerFunc) http.HandlerFunc {
 }
 
 type vlessStatusResponse struct {
-	Enabled            bool           `json:"enabled"`
-	ConfigRepo         string         `json:"config_repo,omitempty"`
-	ConfigBranch       string         `json:"config_branch,omitempty"`
-	ConfigPath         string         `json:"config_path,omitempty"`
-	HasConfigToken     bool           `json:"has_config_token"`
-	UploadRepo         string         `json:"upload_repo,omitempty"`
-	HasUploadToken     bool           `json:"has_upload_token"`
-	UseConfigForUpload bool           `json:"use_config_for_upload"`
-	File               string         `json:"file,omitempty"`
-	Count              int            `json:"count"`
-	Merge              bool           `json:"merge"`
-	ECH                bool           `json:"ech"`
-	UUID               string         `json:"uuid,omitempty"`
-	Host               string         `json:"host,omitempty"`
-	SNI                string         `json:"sni,omitempty"`
-	Path               string         `json:"path,omitempty"`
-	FP                 string         `json:"fp,omitempty"`
-	SubscriptionURL    string         `json:"subscription_url,omitempty"`
-	FetchedAt          int64          `json:"fetched_at,omitempty"`
-	Defaults           *vlessDefaults `json:"defaults,omitempty"`
-	Presets            *vlessPresets  `json:"presets,omitempty"`
-	Warning            string         `json:"warning,omitempty"`
+	Enabled             bool           `json:"enabled"`
+	ConfigRepo          string         `json:"config_repo,omitempty"`
+	ConfigBranch        string         `json:"config_branch,omitempty"`
+	ConfigPath          string         `json:"config_path,omitempty"`
+	HasConfigToken      bool           `json:"has_config_token"`
+	UploadRepo          string         `json:"upload_repo,omitempty"`
+	HasUploadToken      bool           `json:"has_upload_token"`
+	UseConfigToken      bool           `json:"use_config_token"`
+	UseSubscriptionRepo bool           `json:"use_subscription_repo"`
+	File                string         `json:"file,omitempty"`
+	Count               int            `json:"count"`
+	Merge               bool           `json:"merge"`
+	ECH                 bool           `json:"ech"`
+	UUID                string         `json:"uuid,omitempty"`
+	Host                string         `json:"host,omitempty"`
+	SNI                 string         `json:"sni,omitempty"`
+	Path                string         `json:"path,omitempty"`
+	FP                  string         `json:"fp,omitempty"`
+	SubscriptionURL     string         `json:"subscription_url,omitempty"`
+	FetchedAt           int64          `json:"fetched_at,omitempty"`
+	Defaults            *vlessDefaults `json:"defaults,omitempty"`
+	Presets             *vlessPresets  `json:"presets,omitempty"`
+	Warning             string         `json:"warning,omitempty"`
 }
 
 func (s *Server) vlessStatus(c *Config) vlessStatusResponse {
@@ -64,25 +65,26 @@ func (s *Server) vlessStatus(c *Config) vlessStatusResponse {
 		return vlessStatusResponse{Enabled: false}
 	}
 	st := vlessStatusResponse{
-		Enabled:            true,
-		ConfigRepo:         c.VlessConfigRepo,
-		ConfigBranch:       c.VlessConfigBranch,
-		ConfigPath:         c.VlessConfigPath,
-		HasConfigToken:     c.VlessConfigToken != "",
-		UploadRepo:         c.VlessUploadRepo,
-		HasUploadToken:     c.VlessUploadToken != "",
-		UseConfigForUpload: c.VlessUseConfigForUpload,
-		File:               c.VlessFile,
-		Count:              c.VlessCount,
-		Merge:              c.VlessMerge,
-		ECH:                c.VlessECH,
-		UUID:               c.VlessUUID,
-		Host:               c.VlessHost,
-		SNI:                c.VlessSNI,
-		Path:               c.VlessPath,
-		FP:                 c.VlessFP,
-		SubscriptionURL:    c.VlessSubscriptionURL,
-		FetchedAt:          c.VlessConfigFetchedAt,
+		Enabled:             true,
+		ConfigRepo:          c.VlessConfigRepo,
+		ConfigBranch:        c.VlessConfigBranch,
+		ConfigPath:          c.VlessConfigPath,
+		HasConfigToken:      c.VlessConfigToken != "",
+		UploadRepo:          c.VlessUploadRepo,
+		HasUploadToken:      c.VlessUploadToken != "",
+		UseConfigToken:      c.VlessUseConfigToken,
+		UseSubscriptionRepo: c.VlessUseSubscriptionRepo,
+		File:                c.VlessFile,
+		Count:               c.VlessCount,
+		Merge:               c.VlessMerge,
+		ECH:                 c.VlessECH,
+		UUID:                c.VlessUUID,
+		Host:                c.VlessHost,
+		SNI:                 c.VlessSNI,
+		Path:                c.VlessPath,
+		FP:                  c.VlessFP,
+		SubscriptionURL:     c.VlessSubscriptionURL,
+		FetchedAt:           c.VlessConfigFetchedAt,
 	}
 	if strings.TrimSpace(c.VlessConfigCache) != "" {
 		if cfg, err := parseNodeWebConfig([]byte(c.VlessConfigCache)); err == nil {
@@ -213,18 +215,19 @@ func (s *Server) handleVlessConfigRefresh(w http.ResponseWriter, r *http.Request
 }
 
 type vlessUploadRequest struct {
-	Count              *int   `json:"count"` // nil = 用已保存的值；0 = 全部
-	File               string `json:"file"`
-	Merge              *bool  `json:"merge"` // nil = 用已保存的值
-	ECH                *bool  `json:"ech"`
-	UUID               string `json:"uuid"`
-	Host               string `json:"host"`
-	SNI                string `json:"sni"`
-	Path               string `json:"path"`
-	FP                 string `json:"fp"`
-	UploadRepo         string `json:"upload_repo"`
-	UploadToken        string `json:"upload_token"`
-	UseConfigForUpload *bool  `json:"use_config_for_upload"`
+	Count               *int   `json:"count"` // nil = 用已保存的值；0 = 全部
+	File                string `json:"file"`
+	Merge               *bool  `json:"merge"` // nil = 用已保存的值
+	ECH                 *bool  `json:"ech"`
+	UUID                string `json:"uuid"`
+	Host                string `json:"host"`
+	SNI                 string `json:"sni"`
+	Path                string `json:"path"`
+	FP                  string `json:"fp"`
+	UploadRepo          string `json:"upload_repo"`
+	UploadToken         string `json:"upload_token"`
+	UseConfigToken      *bool  `json:"use_config_token"`
+	UseSubscriptionRepo *bool  `json:"use_subscription_repo"`
 }
 
 type vlessUploadResponse struct {
@@ -262,16 +265,25 @@ func (s *Server) vlessTarget(c *Config, cfg *nodeWebConfig) (repo, token, branch
 	if cfg != nil && strings.TrimSpace(cfg.Github.Branch) != "" {
 		branch = strings.TrimSpace(cfg.Github.Branch)
 	}
-	if c.VlessUseConfigForUpload {
-		repo, token = c.VlessConfigRepo, c.VlessConfigToken
+	repo = strings.TrimSpace(c.VlessUploadRepo)
+	if repo == "" && cfg != nil {
+		repo = cfg.Github.Worker.Repo
+		if repo == "" {
+			repo = cfg.Github.Repo
+		}
+	}
+	// 「沿用配置项令牌」优先级最高
+	if c.VlessUseConfigToken {
+		token = c.VlessConfigToken
 	} else {
-		repo = strings.TrimSpace(c.VlessUploadRepo)
 		token = strings.TrimSpace(c.VlessUploadToken)
-		if repo == "" && cfg != nil {
-			repo = cfg.Github.Worker.Repo
-			if repo == "" {
-				repo = cfg.Github.Repo
-			}
+	}
+	// 「沿用订阅仓库与令牌」强制使用订阅仓库（config.js 的 worker.repo）
+	if c.VlessUseSubscriptionRepo && !c.VlessUseConfigToken && cfg != nil {
+		if wr := strings.TrimSpace(cfg.Github.Worker.Repo); wr != "" {
+			repo = wr
+		} else if r := strings.TrimSpace(cfg.Github.Repo); r != "" {
+			repo = r
 		}
 	}
 	if !validRepo(repo) {
@@ -322,8 +334,15 @@ func (s *Server) handleVlessUpload(w http.ResponseWriter, r *http.Request) {
 		warning = "拉取最新 config.js 失败，已使用上一次缓存"
 	}
 
-	if req.UseConfigForUpload != nil {
-		c.VlessUseConfigForUpload = *req.UseConfigForUpload
+	if req.UseConfigToken != nil {
+		c.VlessUseConfigToken = *req.UseConfigToken
+	}
+	if req.UseSubscriptionRepo != nil {
+		c.VlessUseSubscriptionRepo = *req.UseSubscriptionRepo
+	}
+	// 两项互斥；「沿用配置项令牌」优先级最高
+	if c.VlessUseConfigToken {
+		c.VlessUseSubscriptionRepo = false
 	}
 	if v := strings.TrimSpace(req.UploadRepo); v != "" {
 		c.VlessUploadRepo = v

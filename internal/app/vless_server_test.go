@@ -324,3 +324,39 @@ func TestVlessSubscriptionEndpoint(t *testing.T) {
 		t.Fatalf("subscription retry failed: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestVlessTargetSelection(t *testing.T) {
+	cfg := &nodeWebConfig{}
+	cfg.Github.Worker.Repo = "Owner/Sub"
+	cfg.Github.Branch = "main"
+
+	c := DefaultConfig()
+	c.VlessConfigRepo = "Owner/NodeWeb"
+	c.VlessConfigToken = "cfg-token"
+	c.VlessUploadRepo = "Owner/Other"
+	c.VlessUploadToken = "up-token"
+	s := &Server{}
+
+	// 默认：沿用配置项令牌，仓库仍用上报仓库
+	c.VlessUseConfigToken = true
+	c.VlessUseSubscriptionRepo = false
+	repo, token, branch, err := s.vlessTarget(c, cfg)
+	if err != nil || repo != "Owner/Other" || token != "cfg-token" || branch != "main" {
+		t.Fatalf("config-token mode wrong: repo=%q token=%q branch=%q err=%v", repo, token, branch, err)
+	}
+
+	// 沿用订阅仓库与令牌：订阅仓库 + 上报令牌
+	c.VlessUseConfigToken = false
+	c.VlessUseSubscriptionRepo = true
+	repo, token, _, err = s.vlessTarget(c, cfg)
+	if err != nil || repo != "Owner/Sub" || token != "up-token" {
+		t.Fatalf("subscription mode wrong: repo=%q token=%q err=%v", repo, token, err)
+	}
+
+	// 都不沿用：上报仓库 + 上报令牌
+	c.VlessUseSubscriptionRepo = false
+	repo, token, _, err = s.vlessTarget(c, cfg)
+	if err != nil || repo != "Owner/Other" || token != "up-token" {
+		t.Fatalf("manual mode wrong: repo=%q token=%q err=%v", repo, token, err)
+	}
+}

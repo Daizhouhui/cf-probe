@@ -230,3 +230,10 @@ em.note{font-style:normal;font-size:11.5px;color:var(--faint);line-height:1.45;
 
 /* ECH 复选框与指纹选择器同排，避免单独占一行 */
 .vless-ech{align-self:end;margin-top:0;padding-bottom:7px}
+
+/* VLESS 弹窗：仓库地址跟在标题后，节省一行高度 */
+.vless-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.vless-head em.note{font-weight:400}
+.check-row{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:7px}
+.check-row .check{margin-top:0}
+#vlessDevNote{display:block;margin-top:6px;min-height:1em}

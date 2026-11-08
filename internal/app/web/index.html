@@ -259,6 +259,7 @@
       </div>
       <div class="field"><label>配置文件路径</label><input type="text" id="vlessCfgPath" value="config.js"></div>
       <div class="modal-actions"><button class="btn primary" id="btnVlessEnable" type="button">启用</button></div>
+      <em class="note" id="vlessDevNote"></em>
     </div>
     <div class="field">
       <label>Worker 域名</label>
@@ -362,7 +363,10 @@
 <!-- VLESS 订阅弹窗 -->
 <div class="mask hidden" id="vlessMask">
   <div class="modal">
-    <h3>VLESS 订阅</h3>
+    <div class="vless-head">
+      <h3>VLESS 订阅</h3>
+      <em class="note" id="vlessRepo"></em>
+    </div>
     <em class="note" id="vlessMeta"></em>
 
     <div class="field">
@@ -378,7 +382,10 @@
     </div>
 
     <hr>
-    <label class="check"><input type="checkbox" id="vlessUseConfig"> 上报沿用配置仓库和令牌</label>
+    <div class="check-row">
+      <label class="check"><input type="checkbox" id="vlessUseConfigToken" checked> 沿用配置项令牌</label>
+      <label class="check"><input type="checkbox" id="vlessUseSubRepo"> 沿用订阅仓库与令牌</label>
+    </div>
     <div class="grid2">
       <div class="field"><label>上报仓库</label><input type="text" id="vlessUploadRepo" placeholder="owner/repo"></div>
       <div class="field"><label>上报令牌</label><input type="password" id="vlessUploadToken" placeholder="留空沿用已保存的"></div>

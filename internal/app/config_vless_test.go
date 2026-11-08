@@ -14,6 +14,9 @@ func TestDefaultConfigHasVlessDefaults(t *testing.T) {
 	if c.VlessFile != "vlesssub" || !c.VlessMerge || c.VlessECH {
 		t.Fatalf("vless upload defaults wrong: file=%q merge=%v ech=%v", c.VlessFile, c.VlessMerge, c.VlessECH)
 	}
+	if !c.VlessUseConfigToken {
+		t.Fatal("vless should reuse the config token by default")
+	}
 }
 
 func TestLoadConfigKeepsVlessDefaultsForOldFiles(t *testing.T) {
@@ -24,5 +27,8 @@ func TestLoadConfigKeepsVlessDefaultsForOldFiles(t *testing.T) {
 	c := loadConfigFrom(p)
 	if c.VlessConfigRepo != "Daizhouhui/NodeWeb" || !c.VlessMerge || c.VlessFile != "vlesssub" {
 		t.Fatalf("old config should inherit vless defaults: %+v", c)
+	}
+	if !c.VlessUseConfigToken {
+		t.Fatal("old config should inherit the config-token default")
 	}
 }
