@@ -125,3 +125,48 @@ func TestRenderVlessFile(t *testing.T) {
 		t.Fatalf("empty should be empty, got %q", got)
 	}
 }
+
+func TestVlessAliasAndProxyLine(t *testing.T) {
+	r := Result{IP: "108.162.195.14", Port: 443, Speed: 16.12, Colo: "NRT"}
+	alias := vlessAlias(r, 443)
+	if alias != "东京成田-16.12MB/s-443-108.162.195.14" {
+		t.Fatalf("alias = %q", alias)
+	}
+	if line := r.IP + ":443#" + alias; line != "108.162.195.14:443#东京成田-16.12MB/s-443-108.162.195.14" {
+		t.Fatalf("line = %q", line)
+	}
+}
+
+func TestMergeProxyLines(t *testing.T) {
+	existing := []string{
+		"1.1.1.1:443#old",
+		"# comment",
+		"2.2.2.2:2053#keep",
+	}
+	incoming := []string{
+		"1.1.1.1:443#new",
+		"3.3.3.3:443#add",
+	}
+	got := mergeProxyLines(existing, incoming)
+	want := []string{
+		"1.1.1.1:443#new",
+		"# comment",
+		"2.2.2.2:2053#keep",
+		"3.3.3.3:443#add",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("merge mismatch\n got: %#v\nwant: %#v", got, want)
+	}
+}
+
+func TestProxyNodeKeyIPv6(t *testing.T) {
+	for _, line := range []string{"[2001:db8::1]:443#x", "2001:db8::1:443#x"} {
+		key, ok := proxyNodeKey(line)
+		if !ok || key != "2001:db8::1:443" {
+			t.Fatalf("%q -> key=%q ok=%v", line, key, ok)
+		}
+	}
+	if _, ok := proxyNodeKey("# comment"); ok {
+		t.Fatal("comment must not parse")
+	}
+}

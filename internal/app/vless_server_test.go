@@ -120,24 +120,28 @@ func TestVlessStatusDisabled(t *testing.T) {
 }
 
 type ghMock struct {
-	existing string
-	put      string
-	putPath  string
-	putMsg   string
+	existing map[string]string
+	puts     map[string]string
+	msgs     map[string]string
 }
 
 func newGHMock(t *testing.T) (*ghMock, func()) {
 	t.Helper()
-	m := &ghMock{}
+	m := &ghMock{
+		existing: map[string]string{},
+		puts:     map[string]string{},
+		msgs:     map[string]string{},
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			if m.existing == "" {
+			content := m.existing[r.URL.Path]
+			if content == "" {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"content":  base64.StdEncoding.EncodeToString([]byte(m.existing)),
+				"content":  base64.StdEncoding.EncodeToString([]byte(content)),
 				"sha":      "sha1",
 				"encoding": "base64",
 			})
@@ -147,7 +151,8 @@ func newGHMock(t *testing.T) (*ghMock, func()) {
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			raw, _ := base64.StdEncoding.DecodeString(body.Content)
-			m.put, m.putPath, m.putMsg = string(raw), r.URL.Path, body.Message
+			m.puts[r.URL.Path] = string(raw)
+			m.msgs[r.URL.Path] = body.Message
 			w.WriteHeader(http.StatusOK)
 		}
 	}))
@@ -185,7 +190,9 @@ func setupUploadTest(t *testing.T, existing string, rawStatus int, subHandler ht
 	oldRaw := rawGithubBase
 	rawGithubBase = raw.URL
 	gh, closeGH := newGHMock(t)
-	gh.existing = existing
+	if existing != "" {
+		gh.existing["/repos/Owner/Sub/contents/vlesssub"] = existing
+	}
 
 	c := DefaultConfig()
 	c.VlessEnabled = true
@@ -212,6 +219,8 @@ func setupUploadTest(t *testing.T, existing string, rawStatus int, subHandler ht
 }
 
 func TestVlessUploadNewFile(t *testing.T) {
+	const vlessPath = "/repos/Owner/Sub/contents/vlesssub"
+	const aliasPath = "/repos/Owner/Sub/contents/cloudflare_ips.txt"
 	f := setupUploadTest(t, "", http.StatusOK, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"url":"https://sub.example/vlesssub"}`))
 	})
@@ -224,17 +233,24 @@ func TestVlessUploadNewFile(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"url":"https://sub.example/vlesssub"`) {
 		t.Fatalf("url missing: %s", rec.Body.String())
 	}
-	if f.gh.putPath != "/repos/Owner/Sub/contents/vlesssub" {
-		t.Fatalf("wrong put path: %s", f.gh.putPath)
+	vless := f.gh.puts[vlessPath]
+	if strings.Count(vless, "vless://") != 2 ||
+		!strings.Contains(vless, "@1.1.1.1:443") ||
+		!strings.Contains(vless, "@2.2.2.2:443") {
+		t.Fatalf("expected 2 qualified nodes, got:\n%s", vless)
 	}
-	if strings.Count(f.gh.put, "vless://") != 2 ||
-		!strings.Contains(f.gh.put, "@1.1.1.1:443") ||
-		!strings.Contains(f.gh.put, "@2.2.2.2:443") {
-		t.Fatalf("expected 2 qualified nodes, got:\n%s", f.gh.put)
+	alias := f.gh.puts[aliasPath]
+	if !strings.Contains(alias, "1.1.1.1:443#香港-20.00MB/s-443-1.1.1.1") ||
+		!strings.Contains(alias, "2.2.2.2:443#新加坡-5.00MB/s-443-2.2.2.2") {
+		t.Fatalf("cloudflare_ips.txt content wrong:\n%s", alias)
+	}
+	if !strings.Contains(rec.Body.String(), `"alias_file":"cloudflare_ips.txt"`) {
+		t.Fatalf("response missing alias file: %s", rec.Body.String())
 	}
 }
 
 func TestVlessUploadMergesExisting(t *testing.T) {
+	const vlessPath = "/repos/Owner/Sub/contents/vlesssub"
 	existing := "vless://u@1.1.1.1:443?old#old\nvless://u@9.9.9.9:443?keep#keep\n"
 	f := setupUploadTest(t, existing, http.StatusOK, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"url":"https://sub.example/x"}`))
@@ -245,17 +261,45 @@ func TestVlessUploadMergesExisting(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("upload failed: %d %s", rec.Code, rec.Body.String())
 	}
-	if strings.Count(f.gh.put, "@1.1.1.1:443") != 1 || strings.Contains(f.gh.put, "#old") {
-		t.Fatalf("existing node should be replaced in place:\n%s", f.gh.put)
+	vless := f.gh.puts[vlessPath]
+	if strings.Count(vless, "@1.1.1.1:443") != 1 || strings.Contains(vless, "#old") {
+		t.Fatalf("existing node should be replaced in place:\n%s", vless)
 	}
-	if !strings.Contains(f.gh.put, "9.9.9.9") || !strings.Contains(f.gh.put, "2.2.2.2") {
-		t.Fatalf("merge lost nodes:\n%s", f.gh.put)
+	if !strings.Contains(vless, "9.9.9.9") || !strings.Contains(vless, "2.2.2.2") {
+		t.Fatalf("merge lost nodes:\n%s", vless)
 	}
-	if strings.Count(f.gh.put, "vless://") != 3 {
-		t.Fatalf("expected 3 unique nodes:\n%s", f.gh.put)
+	if strings.Count(vless, "vless://") != 3 {
+		t.Fatalf("expected 3 unique nodes:\n%s", vless)
 	}
-	if !strings.Contains(f.gh.putMsg, "更新 VLESS 订阅 (2 个)(总共3节点)") {
-		t.Fatalf("commit message missing total: %q", f.gh.putMsg)
+	if !strings.Contains(f.gh.msgs[vlessPath], "更新 VLESS 订阅 (2 个)(总共3节点)") {
+		t.Fatalf("commit message missing total: %q", f.gh.msgs[vlessPath])
+	}
+}
+
+func TestVlessUploadSyncsCloudflareIPs(t *testing.T) {
+	const aliasPath = "/repos/Owner/Sub/contents/cloudflare_ips.txt"
+	f := setupUploadTest(t, "", http.StatusOK, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"url":"https://sub.example/x"}`))
+	})
+	defer f.close()
+	f.gh.existing[aliasPath] = "9.9.9.9:443#old\n1.1.1.1:443#oldalias\n"
+
+	rec := doVlessUpload(f.srv, `{"count":0,"merge":true}`)
+	if rec.Code != 200 {
+		t.Fatalf("upload failed: %d %s", rec.Code, rec.Body.String())
+	}
+	content := f.gh.puts[aliasPath]
+	if strings.Contains(content, "oldalias") || !strings.Contains(content, "1.1.1.1:443#香港-20.00MB/s-443-1.1.1.1") {
+		t.Fatalf("existing alias should be replaced:\n%s", content)
+	}
+	if !strings.Contains(content, "9.9.9.9:443#old") || !strings.Contains(content, "2.2.2.2:443#") {
+		t.Fatalf("alias merge lost nodes:\n%s", content)
+	}
+	if strings.Count(content, "\n") != 3 {
+		t.Fatalf("expected 3 alias lines:\n%s", content)
+	}
+	if !strings.Contains(rec.Body.String(), `"alias_count":3`) {
+		t.Fatalf("response should report alias count: %s", rec.Body.String())
 	}
 }
 
@@ -270,12 +314,13 @@ func TestVlessUploadRejectsEmptyResults(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("want 400, got %d %s", rec.Code, rec.Body.String())
 	}
-	if f.gh.put != "" {
-		t.Fatalf("must not PUT when there are no qualified nodes:\n%s", f.gh.put)
+	if len(f.gh.puts) != 0 {
+		t.Fatalf("must not PUT when there are no qualified nodes: %+v", f.gh.puts)
 	}
 }
 
 func TestVlessUploadUsesCacheOnFetchFailure(t *testing.T) {
+	const vlessPath = "/repos/Owner/Sub/contents/vlesssub"
 	f := setupUploadTest(t, "", http.StatusInternalServerError, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"url":"https://sub.example/x"}`))
 	})
@@ -285,12 +330,13 @@ func TestVlessUploadUsesCacheOnFetchFailure(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("cache fallback failed: %d %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `"warning"`) || f.gh.put == "" {
-		t.Fatalf("expected warning + upload, got %s\nput=%q", rec.Body.String(), f.gh.put)
+	if !strings.Contains(rec.Body.String(), `"warning"`) || f.gh.puts[vlessPath] == "" {
+		t.Fatalf("expected warning + upload, got %s\nput=%q", rec.Body.String(), f.gh.puts[vlessPath])
 	}
 }
 
 func TestVlessUploadSubscriptionFailure(t *testing.T) {
+	const vlessPath = "/repos/Owner/Sub/contents/vlesssub"
 	f := setupUploadTest(t, "", http.StatusOK, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"error":"manager down"}`))
@@ -301,7 +347,7 @@ func TestVlessUploadSubscriptionFailure(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("upload should succeed: %d %s", rec.Code, rec.Body.String())
 	}
-	if f.gh.put == "" {
+	if f.gh.puts[vlessPath] == "" {
 		t.Fatal("upload content missing")
 	}
 	if !strings.Contains(rec.Body.String(), `"subscription_error"`) || strings.Contains(rec.Body.String(), `"url":"`) {

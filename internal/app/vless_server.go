@@ -236,6 +236,9 @@ type vlessUploadResponse struct {
 	File              string `json:"file"`
 	URL               string `json:"url,omitempty"`
 	Merged            bool   `json:"merged"`
+	AliasFile         string `json:"alias_file,omitempty"`
+	AliasCount        int    `json:"alias_count,omitempty"`
+	AliasError        string `json:"alias_error,omitempty"`
 	Warning           string `json:"warning,omitempty"`
 	SubscriptionError string `json:"subscription_error,omitempty"`
 }
@@ -398,6 +401,7 @@ func (s *Server) handleVlessUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lines := make([]string, 0, len(nodes))
+	aliasLines := make([]string, 0, len(nodes))
 	for _, node := range nodes {
 		line, err := buildVlessLink(opts, node)
 		if err != nil {
@@ -405,6 +409,8 @@ func (s *Server) handleVlessUpload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		lines = append(lines, line)
+		port := vlessPort(opts, node)
+		aliasLines = append(aliasLines, fmt.Sprintf("%s:%d#%s", node.IP, port, vlessAlias(node, port)))
 	}
 
 	repo, token, branch, err := s.vlessTarget(c, cfg)
@@ -452,9 +458,46 @@ func (s *Server) handleVlessUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 同步 cloudflare_ips.txt：IP:端口#别名，合并规则与订阅文件一致。
+	const aliasFile = "cloudflare_ips.txt"
+	aliasFinal := aliasLines
+	aliasErr := ""
+	if c.VlessMerge {
+		old, _, err := githubGetFile(r.Context(), repo, branch, aliasFile, token)
+		if err != nil {
+			aliasErr = "读取 cloudflare_ips.txt 失败: " + err.Error()
+		} else if len(old) > 0 {
+			oldLines := strings.Split(strings.ReplaceAll(string(old), "\r\n", "\n"), "\n")
+			for len(oldLines) > 0 && strings.TrimSpace(oldLines[len(oldLines)-1]) == "" {
+				oldLines = oldLines[:len(oldLines)-1]
+			}
+			aliasFinal = mergeProxyLines(oldLines, aliasLines)
+		}
+	}
+	aliasTotal := 0
+	for _, line := range aliasFinal {
+		if _, ok := proxyNodeKey(line); ok {
+			aliasTotal++
+		}
+	}
+	aliasContent := renderVlessFile(aliasFinal)
+	if aliasErr == "" {
+		aliasMsg := fmt.Sprintf("更新 cloudflare_ips.txt (%d 个)(总共%d节点) %s",
+			len(aliasLines), aliasTotal, time.Now().Format("2006-01-02 15:04"))
+		if err := githubPutFile(r.Context(), repo, branch, aliasFile, token, aliasMsg, []byte(aliasContent)); err != nil {
+			aliasErr = err.Error()
+		}
+	}
+
 	subURL, subErr := requestSubscription(r.Context(),
 		cfg.Github.Worker.BaseURL, cfg.Github.Worker.SubscriptionAPIPath, token, c.VlessFile)
 	resp := vlessUploadResponse{OK: true, Count: len(lines), File: c.VlessFile, Merged: merged, Warning: warning}
+	if aliasErr != "" {
+		resp.AliasError = aliasErr
+	} else {
+		resp.AliasFile = aliasFile
+		resp.AliasCount = aliasTotal
+	}
 	if subErr != nil {
 		resp.SubscriptionError = subErr.Error()
 	} else {

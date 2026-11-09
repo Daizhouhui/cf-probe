@@ -263,6 +263,8 @@
       });
       let msg = `已上报 ${r.count} 个节点到 ${r.file}`;
       if (r.merged) msg += '（已合并去重）';
+      if (r.alias_file) msg += `\n已同步 ${r.alias_file}（共 ${r.alias_count} 条）`;
+      if (r.alias_error) msg += '\ncloudflare_ips.txt 同步失败：' + r.alias_error;
       if (r.warning) msg += '\n提示：' + r.warning;
       if (r.subscription_error) msg += '\n订阅链接获取失败：' + r.subscription_error;
       renderResult(msg, r.url || '');
