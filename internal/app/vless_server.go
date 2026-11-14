@@ -430,18 +430,12 @@ func (s *Server) handleVlessUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	finalLines := lines
 	if c.VlessMerge {
-		var existingLines []string
-		if len(existing) > 0 {
-			existingLines = strings.Split(strings.ReplaceAll(string(existing), "\r\n", "\n"), "\n")
-			for len(existingLines) > 0 && strings.TrimSpace(existingLines[len(existingLines)-1]) == "" {
-				existingLines = existingLines[:len(existingLines)-1]
-			}
-			merged = len(existingLines) > 0
-		}
+		existingLines := splitTextLines(decodeSubscription(existing))
+		merged = len(existingLines) > 0
 		finalLines = mergeVlessLines(existingLines, lines)
 	}
-	content := renderVlessFile(finalLines)
-	if content == "" {
+	content := encodeSubscription(finalLines)
+	if len(content) == 0 {
 		writeErr(w, http.StatusBadRequest, "没有可写入的内容")
 		return
 	}
@@ -453,7 +447,7 @@ func (s *Server) handleVlessUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	msg := fmt.Sprintf("更新 VLESS 订阅 (%d 个)(总共%d节点) %s",
 		len(lines), totalNodes, time.Now().Format("2006-01-02 15:04"))
-	if err := githubPutFile(r.Context(), repo, branch, c.VlessFile, token, msg, []byte(content)); err != nil {
+	if err := githubPutFile(r.Context(), repo, branch, c.VlessFile, token, msg, content); err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -467,11 +461,7 @@ func (s *Server) handleVlessUpload(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			aliasErr = "读取 cloudflare_ips.txt 失败: " + err.Error()
 		} else if len(old) > 0 {
-			oldLines := strings.Split(strings.ReplaceAll(string(old), "\r\n", "\n"), "\n")
-			for len(oldLines) > 0 && strings.TrimSpace(oldLines[len(oldLines)-1]) == "" {
-				oldLines = oldLines[:len(oldLines)-1]
-			}
-			aliasFinal = mergeProxyLines(oldLines, aliasLines)
+			aliasFinal = mergeProxyLines(splitTextLines(string(old)), aliasLines)
 		}
 	}
 	aliasTotal := 0

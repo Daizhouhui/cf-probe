@@ -233,7 +233,12 @@ func TestVlessUploadNewFile(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"url":"https://sub.example/vlesssub"`) {
 		t.Fatalf("url missing: %s", rec.Body.String())
 	}
-	vless := f.gh.puts[vlessPath]
+	vlessEncoded := f.gh.puts[vlessPath]
+	vlessBytes, err := base64.StdEncoding.DecodeString(vlessEncoded)
+	if err != nil {
+		t.Fatalf("vlesssub should be base64: %v", err)
+	}
+	vless := string(vlessBytes)
 	if strings.Count(vless, "vless://") != 2 ||
 		!strings.Contains(vless, "@1.1.1.1:443") ||
 		!strings.Contains(vless, "@2.2.2.2:443") {
@@ -251,7 +256,7 @@ func TestVlessUploadNewFile(t *testing.T) {
 
 func TestVlessUploadMergesExisting(t *testing.T) {
 	const vlessPath = "/repos/Owner/Sub/contents/vlesssub"
-	existing := "vless://u@1.1.1.1:443?old#old\nvless://u@9.9.9.9:443?keep#keep\n"
+	existing := base64.StdEncoding.EncodeToString([]byte("vless://u@1.1.1.1:443?old#old\nvless://u@9.9.9.9:443?keep#keep\n"))
 	f := setupUploadTest(t, existing, http.StatusOK, func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"url":"https://sub.example/x"}`))
 	})
@@ -261,7 +266,11 @@ func TestVlessUploadMergesExisting(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("upload failed: %d %s", rec.Code, rec.Body.String())
 	}
-	vless := f.gh.puts[vlessPath]
+	vlessRaw, err := base64.StdEncoding.DecodeString(f.gh.puts[vlessPath])
+	if err != nil {
+		t.Fatalf("vlesssub should be base64: %v", err)
+	}
+	vless := string(vlessRaw)
 	if strings.Count(vless, "@1.1.1.1:443") != 1 || strings.Contains(vless, "#old") {
 		t.Fatalf("existing node should be replaced in place:\n%s", vless)
 	}
@@ -273,6 +282,31 @@ func TestVlessUploadMergesExisting(t *testing.T) {
 	}
 	if !strings.Contains(f.gh.msgs[vlessPath], "更新 VLESS 订阅 (2 个)(总共3节点)") {
 		t.Fatalf("commit message missing total: %q", f.gh.msgs[vlessPath])
+	}
+}
+
+func TestVlessUploadMergesPlainExisting(t *testing.T) {
+	const vlessPath = "/repos/Owner/Sub/contents/vlesssub"
+	existing := "vless://u@1.1.1.1:443?old#old\nvless://u@9.9.9.9:443?keep#keep\n"
+	f := setupUploadTest(t, existing, http.StatusOK, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"url":"https://sub.example/x"}`))
+	})
+	defer f.close()
+
+	rec := doVlessUpload(f.srv, `{"count":0,"merge":true}`)
+	if rec.Code != 200 {
+		t.Fatalf("upload failed: %d %s", rec.Code, rec.Body.String())
+	}
+	raw, err := base64.StdEncoding.DecodeString(f.gh.puts[vlessPath])
+	if err != nil {
+		t.Fatalf("upgraded subscription should be base64: %v", err)
+	}
+	vless := string(raw)
+	if !strings.Contains(vless, "1.1.1.1") || !strings.Contains(vless, "9.9.9.9") || !strings.Contains(vless, "2.2.2.2") {
+		t.Fatalf("plain existing merge lost nodes:\n%s", vless)
+	}
+	if strings.Count(vless, "vless://") != 3 {
+		t.Fatalf("expected 3 nodes:\n%s", vless)
 	}
 }
 

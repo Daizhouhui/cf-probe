@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -184,6 +185,48 @@ func renderVlessFile(lines []string) string {
 		return ""
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// splitTextLines 把文件内容拆成行，去掉末尾空行。
+func splitTextLines(text string) []string {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
+}
+
+// encodeSubscription 把节点列表编码成标准 base64 订阅内容（单行）。
+func encodeSubscription(lines []string) []byte {
+	text := renderVlessFile(lines)
+	if text == "" {
+		return nil
+	}
+	return []byte(base64.StdEncoding.EncodeToString([]byte(text)))
+}
+
+// decodeSubscription 兼容两种远端文件：base64 订阅和旧版明文订阅。
+func decodeSubscription(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+	compact := strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\r', ' ', '\t':
+			return -1
+		}
+		return r
+	}, string(data))
+	if decoded, err := base64.StdEncoding.DecodeString(compact); err == nil {
+		text := string(decoded)
+		if strings.Contains(text, "vless://") {
+			return text
+		}
+	}
+	return string(data)
 }
 
 // proxyNodeKey 从「IP:端口#别名」或「IP:端口」里取出 host:port。
